@@ -19,7 +19,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Workflow,
-  BarChart3
+  BarChart3,
+  MessageSquare
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { clsx } from 'clsx';
@@ -34,6 +35,7 @@ export default function Sidebar() {
     { name: 'Add MT5 Account', href: '/dashboard/add-account', icon: Plus },
     { name: 'TradingView Bridge', href: '/dashboard/bridge', icon: LinkIcon },
     { name: 'Agentic Automations', href: '/dashboard/agentic', icon: Workflow },
+    { name: 'AI Assistant', href: '/dashboard/ai-chat', icon: MessageSquare },
     { name: 'Strategy Backtester', href: '/dashboard/backtest', icon: BarChart3 },
     { name: 'Trades', href: '/dashboard/trades', icon: TrendingUp },
     { name: 'Notifications', href: '/dashboard/notifications', icon: Bell, badge: unreadCount },
