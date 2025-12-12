@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build
+dist/
+build/
+*.log
+
+# Sensitive
+backend/trading_maven.db
+backend/.env
+frontend/.env.local
+
+# Test files
+backend/test_*.py
+backend/check_*.py
+backend/reset_*.py
+backend/get_*.py
+
+# Temporary
+*.tmp
+*.temp
+temp/
+output/
+
+# Alembic
+alembic/versions/*.pyc
