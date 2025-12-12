@@ -398,7 +398,9 @@ def _format_result(result: BacktestResult) -> Dict[str, Any]:
             "percentile_5": float(result.monte_carlo.percentile_5),
             "percentile_95": float(result.monte_carlo.percentile_95),
             "probability_of_loss": float(result.monte_carlo.probability_of_loss),
+            "probability_of_50pct_loss": float(result.monte_carlo.probability_of_50pct_loss),
             "worst_max_drawdown": float(result.monte_carlo.worst_max_drawdown),
+            "drawdown_95": float(result.monte_carlo.drawdown_95),
             "equity_curves": [[float(v) for v in curve] for curve in result.monte_carlo.equity_curves[:20]]
         } if result.monte_carlo else None,
         "total_bars": int(result.total_bars),
