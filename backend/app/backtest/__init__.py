@@ -1,6 +1,6 @@
 """
 Enterprise-Grade Backtesting System
-- Dual data source (MT5 + Yahoo Finance fallback)
+- MT5 data source for all timeframes
 - Fast vectorized backtesting engine
 - Advanced analytics and visualizations
 """

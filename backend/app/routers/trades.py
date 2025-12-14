@@ -252,21 +252,67 @@ async def sync_positions(
     )
     account = result.scalar_one_or_none()
     
-    if not account or not account.is_connected:
+    if not account:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="MT5 account not connected"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="MT5 account not found"
         )
     
-    # Ensure MT5 session is active for this account
+    if not account.is_connected:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="MT5 account is not connected. Please connect first."
+        )
+    
+    # Check if encrypted password exists
+    if not account.encrypted_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="MT5 password not stored. Please reconnect your account."
+        )
+    
+    # Decrypt password
     try:
         password = encryption_handler.decrypt(account.encrypted_password)
-        await mt5_handler.initialize()
+    except Exception as e:
+        print(f"❌ Password decryption failed for account {account_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to decrypt MT5 password. Please reconnect your account."
+        )
+    
+    # Initialize MT5
+    try:
+        init_success = await mt5_handler.initialize()
+        if not init_success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to initialize MT5 terminal. Make sure MT5 is installed and running."
+            )
+    except Exception as e:
+        print(f"❌ MT5 initialization failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"MT5 initialization error: {str(e)}"
+        )
+    
+    # Login to MT5
+    try:
         success, error = await mt5_handler.login(int(account.account_number), password, account.server)
         if not success:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error or "Failed to login to MT5")
+            print(f"❌ MT5 login failed for account {account.account_number}: {error}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=error or "Failed to login to MT5. Check your credentials."
+            )
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"MT5 login error: {str(e)}")
+        print(f"❌ MT5 login exception: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"MT5 login error: {str(e)}"
+        )
 
     # Get open positions from MT5
     positions = await mt5_handler.get_open_positions()

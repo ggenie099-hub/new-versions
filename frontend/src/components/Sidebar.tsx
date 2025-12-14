@@ -20,7 +20,8 @@ import {
   ChevronRight,
   Workflow,
   BarChart3,
-  MessageSquare
+  MessageSquare,
+  Shield
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { clsx } from 'clsx';
@@ -160,6 +161,17 @@ export default function Sidebar() {
           {/* Footer (hidden in minimized state) */}
           {!sidebarMinimized && (
             <div className="p-4 border-t border-gray-200 dark:border-gray-800 space-y-2">
+            {/* Admin Panel Link - Only for admin users */}
+            {user?.role === 'admin' && (
+              <Link
+                href="/admin"
+                className="w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+              >
+                <Shield size={20} />
+                <span>Admin Panel</span>
+              </Link>
+            )}
+
             {/* Theme toggle */}
             <button
               onClick={toggleTheme}

@@ -31,7 +31,7 @@ class BacktestRequest(BaseModel):
     spread: float = Field(default=0.0002, ge=0, description="Spread (0.02%)")
     leverage: int = Field(default=100, ge=1, le=500, description="Leverage")
     risk_per_trade: float = Field(default=0.02, ge=0.001, le=0.5, description="Risk per trade (2%)")
-    data_source: str = Field(default="auto", description="Data source: mt5, yahoo, auto")
+    data_source: str = Field(default="mt5", description="Data source: mt5 (primary)")
     
     # Strategy
     strategy: str = Field(default="sma_crossover", description="Strategy name")
@@ -82,9 +82,9 @@ async def run_backtest(
         }
         timeframe = tf_map.get(request.timeframe, TimeFrame.H1)
         
-        # Parse data source
-        source_map = {"mt5": DataSource.MT5, "yahoo": DataSource.YAHOO, "auto": DataSource.AUTO}
-        data_source = source_map.get(request.data_source, DataSource.AUTO)
+        # Parse data source - MT5 only
+        source_map = {"mt5": DataSource.MT5, "auto": DataSource.AUTO}
+        data_source = source_map.get(request.data_source, DataSource.MT5)
         
         # Create config
         config = BacktestConfig(
@@ -130,9 +130,24 @@ async def run_backtest(
             execution_time_ms=result.execution_time_ms
         )
         
+    except ValueError as e:
+        # Data loading or validation errors
+        error_msg = str(e)
+        logger.error(f"Backtest validation error: {error_msg}")
+        return BacktestResponse(
+            success=False,
+            message=error_msg,
+            result=None,
+            execution_time_ms=0
+        )
     except Exception as e:
         logger.error(f"Backtest error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return BacktestResponse(
+            success=False,
+            message=f"Backtest failed: {str(e)}",
+            result=None,
+            execution_time_ms=0
+        )
 
 
 @router.post("/quick", response_model=BacktestResponse)
@@ -203,14 +218,14 @@ async def get_available_strategies(
 
 @router.get("/symbols")
 async def get_available_symbols(
-    source: str = "auto",
+    source: str = "mt5",
     current_user: User = Depends(get_current_user)
 ):
     """
-    Get list of available symbols
+    Get list of available symbols from MT5
     """
-    source_map = {"mt5": DataSource.MT5, "yahoo": DataSource.YAHOO, "auto": DataSource.AUTO}
-    data_source = source_map.get(source, DataSource.AUTO)
+    source_map = {"mt5": DataSource.MT5, "auto": DataSource.AUTO}
+    data_source = source_map.get(source, DataSource.MT5)
     
     symbols = await data_fetcher.get_available_symbols(data_source)
     
@@ -237,35 +252,31 @@ async def get_data_status(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Check data source availability
-    Yahoo Finance is the default - no MT5 auto-connect
+    Check data source availability - MT5 only
     """
+    mt5_available = await data_fetcher.check_mt5_available()
     return {
         "mt5": {
-            "available": False,  # MT5 disabled by default for backtesting
-            "status": "disabled",
-            "message": "MT5 not used for backtesting (uses Yahoo Finance)"
+            "available": mt5_available,
+            "status": "active" if mt5_available else "disconnected",
+            "message": "MT5 is the primary data source for all trading data"
         },
-        "yahoo": {
-            "available": True,  # Always available - primary source
-            "status": "active"
-        },
-        "recommended": "yahoo",
-        "note": "Backtesting uses Yahoo Finance data. MT5 is only for live trading."
+        "recommended": "mt5",
+        "note": "All data (live and backtest) comes from MetaTrader 5"
     }
 
 
 @router.post("/validate-symbol")
 async def validate_symbol(
     symbol: str,
-    source: str = "auto",
+    source: str = "mt5",
     current_user: User = Depends(get_current_user)
 ):
     """
-    Validate if a symbol is available and get sample data
+    Validate if a symbol is available in MT5 and get sample data
     """
-    source_map = {"mt5": DataSource.MT5, "yahoo": DataSource.YAHOO, "auto": DataSource.AUTO}
-    data_source = source_map.get(source, DataSource.AUTO)
+    source_map = {"mt5": DataSource.MT5, "auto": DataSource.AUTO}
+    data_source = source_map.get(source, DataSource.MT5)
     
     # Try to fetch a small sample
     end_date = datetime.now()

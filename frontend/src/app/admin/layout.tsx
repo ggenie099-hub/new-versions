@@ -38,9 +38,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
     if (userData) {
       const parsed = JSON.parse(userData);
-      // For now, allow admin@autotrading.com as admin
-      // TODO: Add proper is_admin field in backend
-      if (parsed.email !== 'admin@autotrading.com' && !parsed.is_admin && parsed.role !== 'admin') {
+      // Role-based access control
+      if (parsed.role !== 'admin') {
         router.push('/dashboard');
         return;
       }

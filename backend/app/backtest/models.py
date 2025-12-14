@@ -27,8 +27,7 @@ class OrderType(str, Enum):
 
 class DataSource(str, Enum):
     MT5 = "mt5"
-    YAHOO = "yahoo"
-    AUTO = "auto"
+    AUTO = "auto"  # Defaults to MT5
 
 
 class Trade(BaseModel):

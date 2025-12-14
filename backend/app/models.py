@@ -12,6 +12,12 @@ class SubscriptionTier(str, enum.Enum):
     ENTERPRISE = "enterprise"
 
 
+class UserRole(str, enum.Enum):
+    USER = "user"
+    ADMIN = "admin"
+    MODERATOR = "moderator"
+
+
 class AccountType(str, enum.Enum):
     DEMO = "demo"
     LIVE = "live"
@@ -26,6 +32,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
+    role = Column(SQLEnum(UserRole), default=UserRole.USER)
     subscription_tier = Column(SQLEnum(SubscriptionTier), default=SubscriptionTier.FREE)
     api_key = Column(String, unique=True, index=True)
     websocket_url = Column(String, unique=True)

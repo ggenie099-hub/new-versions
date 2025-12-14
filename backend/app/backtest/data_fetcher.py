@@ -1,13 +1,14 @@
 """
-Dual Data Source Fetcher - MT5 Primary, Yahoo Finance Fallback
-Auto-switches when MT5 is not available
+MT5 Data Fetcher - All data from MetaTrader 5
+Supports all timeframes for live data and backtesting
+Robust error handling and connection management
 """
 import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Tuple, Dict, List
 from concurrent.futures import ThreadPoolExecutor
-import numpy as np
+import traceback
 
 try:
     import pandas as pd
@@ -16,13 +17,10 @@ except ImportError:
 
 try:
     import MetaTrader5 as mt5
+    MT5_AVAILABLE = True
 except ImportError:
     mt5 = None
-
-try:
-    import yfinance as yf
-except ImportError:
-    yf = None
+    MT5_AVAILABLE = False
 
 from .models import TimeFrame, DataSource
 
@@ -31,119 +29,119 @@ logger = logging.getLogger(__name__)
 
 class DataFetcher:
     """
-    Enterprise-grade data fetcher with automatic failover
-    Primary: Yahoo Finance (free, no login required)
-    Optional: MT5 (only when explicitly requested AND user has connected account)
-    
-    NOTE: We do NOT auto-connect to MT5 without user permission.
-    Yahoo Finance is used by default for backtesting.
+    MT5 Data Fetcher for live data and backtesting
+    All data comes from MetaTrader 5 terminal
     """
     
-    # MT5 timeframe mapping (only used if MT5 explicitly requested)
-    MT5_TIMEFRAMES = {
-        TimeFrame.M1: mt5.TIMEFRAME_M1 if mt5 else 1,
-        TimeFrame.M5: mt5.TIMEFRAME_M5 if mt5 else 5,
-        TimeFrame.M15: mt5.TIMEFRAME_M15 if mt5 else 15,
-        TimeFrame.M30: mt5.TIMEFRAME_M30 if mt5 else 30,
-        TimeFrame.H1: mt5.TIMEFRAME_H1 if mt5 else 60,
-        TimeFrame.H4: mt5.TIMEFRAME_H4 if mt5 else 240,
-        TimeFrame.D1: mt5.TIMEFRAME_D1 if mt5 else 1440,
-        TimeFrame.W1: mt5.TIMEFRAME_W1 if mt5 else 10080,
-        TimeFrame.MN1: mt5.TIMEFRAME_MN1 if mt5 else 43200,
-    }
-    
-    # Yahoo Finance interval mapping
-    YAHOO_INTERVALS = {
-        TimeFrame.M1: "1m",
-        TimeFrame.M5: "5m",
-        TimeFrame.M15: "15m",
-        TimeFrame.M30: "30m",
-        TimeFrame.H1: "1h",
-        TimeFrame.H4: "1h",  # Yahoo doesn't have 4h, we'll resample
-        TimeFrame.D1: "1d",
-        TimeFrame.W1: "1wk",
-        TimeFrame.MN1: "1mo",
-    }
-    
-    # Symbol mapping MT5 -> Yahoo
-    SYMBOL_MAP = {
-        "EURUSD": "EURUSD=X",
-        "GBPUSD": "GBPUSD=X",
-        "USDJPY": "USDJPY=X",
-        "USDCHF": "USDCHF=X",
-        "AUDUSD": "AUDUSD=X",
-        "USDCAD": "USDCAD=X",
-        "NZDUSD": "NZDUSD=X",
-        "XAUUSD": "GC=F",
-        "XAGUSD": "SI=F",
-        "US30": "^DJI",
-        "US500": "^GSPC",
-        "US100": "^NDX",
-        "BTCUSD": "BTC-USD",
-        "ETHUSD": "ETH-USD",
-    }
+    # Common trading symbols (fallback)
+    COMMON_SYMBOLS = [
+        "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD",
+        "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "CADJPY", "CHFJPY",
+        "XAUUSD", "XAGUSD", "US30", "US500", "US100", "BTCUSD", "ETHUSD"
+    ]
     
     def __init__(self):
         self.executor = ThreadPoolExecutor(max_workers=4)
-        # MT5 is disabled by default - only enable when user explicitly connects
-        self._mt5_enabled: bool = False
-        self._mt5_account_id: Optional[int] = None
+        self._mt5_initialized: bool = False
+        self._last_error: str = ""
     
-    def enable_mt5(self, account_id: int):
-        """Enable MT5 data source for a specific connected account"""
-        self._mt5_enabled = True
-        self._mt5_account_id = account_id
-        logger.info(f"MT5 data source enabled for account {account_id}")
+    def _get_mt5_timeframe(self, timeframe: TimeFrame):
+        """Get MT5 timeframe constant"""
+        if not MT5_AVAILABLE:
+            return None
+        
+        tf_map = {
+            TimeFrame.M1: mt5.TIMEFRAME_M1,
+            TimeFrame.M5: mt5.TIMEFRAME_M5,
+            TimeFrame.M15: mt5.TIMEFRAME_M15,
+            TimeFrame.M30: mt5.TIMEFRAME_M30,
+            TimeFrame.H1: mt5.TIMEFRAME_H1,
+            TimeFrame.H4: mt5.TIMEFRAME_H4,
+            TimeFrame.D1: mt5.TIMEFRAME_D1,
+            TimeFrame.W1: mt5.TIMEFRAME_W1,
+            TimeFrame.MN1: mt5.TIMEFRAME_MN1,
+        }
+        return tf_map.get(timeframe)
+
+    def _ensure_mt5_initialized(self) -> Tuple[bool, str]:
+        """
+        Ensure MT5 is initialized and connected
+        Returns: (success, error_message)
+        """
+        if not MT5_AVAILABLE:
+            return False, "MetaTrader5 package not installed"
+        
+        try:
+            # Check if already initialized and connected
+            if self._mt5_initialized:
+                info = mt5.terminal_info()
+                if info is not None and info.connected:
+                    return True, ""
+                self._mt5_initialized = False
+            
+            # Try to initialize
+            if not mt5.initialize():
+                error = mt5.last_error()
+                error_msg = f"MT5 initialization failed: {error}"
+                logger.error(error_msg)
+                return False, error_msg
+            
+            # Check connection
+            info = mt5.terminal_info()
+            if info is None:
+                return False, "MT5 terminal info not available"
+            
+            if not info.connected:
+                return False, "MT5 terminal not connected to broker"
+            
+            self._mt5_initialized = True
+            logger.info(f"MT5 initialized: {info.name}, Build: {info.build}")
+            return True, ""
+            
+        except Exception as e:
+            error_msg = f"MT5 initialization error: {str(e)}"
+            logger.error(error_msg)
+            return False, error_msg
     
-    def disable_mt5(self):
-        """Disable MT5 data source"""
-        self._mt5_enabled = False
-        self._mt5_account_id = None
-        logger.info("MT5 data source disabled")
+    def _find_symbol(self, symbol: str) -> Optional[str]:
+        """Find symbol in MT5, trying different variations"""
+        if not MT5_AVAILABLE:
+            return None
+        
+        # Try exact match first
+        if mt5.symbol_select(symbol, True):
+            return symbol
+        
+        # Try common suffixes
+        suffixes = ['', '.', 'm', 'micro', '_', '.i', '.e']
+        for suffix in suffixes:
+            test_symbol = f"{symbol}{suffix}"
+            if mt5.symbol_select(test_symbol, True):
+                logger.info(f"Symbol {symbol} found as {test_symbol}")
+                return test_symbol
+        
+        # Try lowercase
+        if mt5.symbol_select(symbol.lower(), True):
+            return symbol.lower()
+        
+        return None
     
     async def check_mt5_available(self) -> bool:
-        """
-        Check if MT5 is available.
-        Returns False by default - MT5 should only be used when explicitly enabled.
-        """
-        # MT5 is only available if explicitly enabled by user
-        if not self._mt5_enabled:
+        """Check if MT5 is available and connected"""
+        if not MT5_AVAILABLE:
             return False
         
-        if mt5 is None:
-            return False
-        
-        # Don't auto-initialize MT5 - just check if it's already running
         loop = asyncio.get_event_loop()
         
         def _check():
-            try:
-                # Only check terminal info, don't initialize
-                info = mt5.terminal_info()
-                return info is not None and info.connected
-            except Exception as e:
-                logger.warning(f"MT5 check failed: {e}")
-                return False
+            success, _ = self._ensure_mt5_initialized()
+            return success
         
-        return await loop.run_in_executor(self.executor, _check)
-    
-    def _convert_symbol_to_yahoo(self, symbol: str) -> str:
-        """Convert MT5 symbol to Yahoo Finance symbol"""
-        # Check direct mapping
-        if symbol in self.SYMBOL_MAP:
-            return self.SYMBOL_MAP[symbol]
-        
-        # Forex pairs
-        if len(symbol) == 6 and symbol.isalpha():
-            return f"{symbol}=X"
-        
-        # Crypto
-        if symbol.endswith("USD") and len(symbol) <= 7:
-            base = symbol[:-3]
-            return f"{base}-USD"
-        
-        # Default: return as-is (might be stock symbol)
-        return symbol
+        try:
+            return await loop.run_in_executor(self.executor, _check)
+        except Exception as e:
+            logger.error(f"MT5 availability check failed: {e}")
+            return False
 
     async def fetch_mt5_data(
         self,
@@ -151,36 +149,64 @@ class DataFetcher:
         timeframe: TimeFrame,
         start_date: datetime,
         end_date: datetime
-    ) -> Optional[pd.DataFrame]:
-        """Fetch historical data from MT5"""
-        if mt5 is None or pd is None:
-            return None
+    ) -> Tuple[Optional[pd.DataFrame], str]:
+        """
+        Fetch historical data from MT5
+        Returns: (DataFrame or None, error_message)
+        """
+        if pd is None:
+            return None, "pandas not installed"
+        
+        if not MT5_AVAILABLE:
+            return None, "MetaTrader5 package not installed"
         
         loop = asyncio.get_event_loop()
         
-        def _fetch():
+        def _fetch() -> Tuple[Optional[pd.DataFrame], str]:
             try:
-                if not mt5.initialize():
-                    logger.error("MT5 initialization failed")
-                    return None
+                # Initialize MT5
+                success, error = self._ensure_mt5_initialized()
+                if not success:
+                    return None, error
                 
-                # Select symbol
-                if not mt5.symbol_select(symbol, True):
-                    logger.warning(f"Symbol {symbol} not found in MT5")
-                    return None
+                # Find symbol
+                symbol_to_use = self._find_symbol(symbol)
+                if symbol_to_use is None:
+                    return None, f"Symbol '{symbol}' not found in MT5. Make sure it's available in your broker."
                 
-                # Get rates
-                mt5_tf = self.MT5_TIMEFRAMES.get(timeframe)
-                rates = mt5.copy_rates_range(symbol, mt5_tf, start_date, end_date)
+                # Get MT5 timeframe
+                mt5_tf = self._get_mt5_timeframe(timeframe)
+                if mt5_tf is None:
+                    return None, f"Invalid timeframe: {timeframe}"
+                
+                # Calculate bars needed
+                delta = end_date - start_date
+                minutes = delta.total_seconds() / 60
+                tf_minutes = {
+                    TimeFrame.M1: 1, TimeFrame.M5: 5, TimeFrame.M15: 15,
+                    TimeFrame.M30: 30, TimeFrame.H1: 60, TimeFrame.H4: 240,
+                    TimeFrame.D1: 1440, TimeFrame.W1: 10080, TimeFrame.MN1: 43200,
+                }
+                tf_min = tf_minutes.get(timeframe, 60)
+                bars_needed = min(int(minutes / tf_min) + 100, 100000)
+                
+                # Try copy_rates_range first
+                rates = mt5.copy_rates_range(symbol_to_use, mt5_tf, start_date, end_date)
+                
+                # If no data, try copy_rates_from
+                if rates is None or len(rates) == 0:
+                    rates = mt5.copy_rates_from(symbol_to_use, mt5_tf, datetime.now(), bars_needed)
                 
                 if rates is None or len(rates) == 0:
-                    logger.warning(f"No data returned from MT5 for {symbol}")
-                    return None
+                    error = mt5.last_error()
+                    return None, f"No data available for {symbol_to_use}. MT5 error: {error}"
                 
                 # Convert to DataFrame
                 df = pd.DataFrame(rates)
                 df['time'] = pd.to_datetime(df['time'], unit='s')
                 df.set_index('time', inplace=True)
+                
+                # Rename columns
                 df.rename(columns={
                     'open': 'Open',
                     'high': 'High',
@@ -189,143 +215,176 @@ class DataFetcher:
                     'tick_volume': 'Volume'
                 }, inplace=True)
                 
-                # Keep only OHLCV
+                # Keep only OHLCV columns
                 df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
                 
-                logger.info(f"MT5: Fetched {len(df)} bars for {symbol}")
-                return df
+                # Remove timezone if present
+                if df.index.tz is not None:
+                    df.index = df.index.tz_localize(None)
+                
+                # Filter by date range (simple string-based to avoid timezone issues)
+                if len(df) > 0:
+                    try:
+                        start_str = start_date.strftime('%Y-%m-%d')
+                        end_str = end_date.strftime('%Y-%m-%d %H:%M:%S')
+                        df = df.loc[start_str:end_str]
+                    except Exception:
+                        # If filtering fails, just use all data
+                        pass
+                
+                if len(df) == 0:
+                    return None, f"No data in the specified date range for {symbol_to_use}"
+                
+                logger.info(f"MT5: Fetched {len(df)} bars for {symbol_to_use} ({timeframe.value})")
+                return df, ""
                 
             except Exception as e:
-                logger.error(f"MT5 data fetch error: {e}")
-                return None
+                error_msg = f"MT5 data fetch error: {str(e)}"
+                logger.error(f"{error_msg}\n{traceback.format_exc()}")
+                return None, error_msg
         
         return await loop.run_in_executor(self.executor, _fetch)
-    
-    async def fetch_yahoo_data(
-        self,
-        symbol: str,
-        timeframe: TimeFrame,
-        start_date: datetime,
-        end_date: datetime
-    ) -> Optional[pd.DataFrame]:
-        """Fetch historical data from Yahoo Finance"""
-        if yf is None or pd is None:
-            logger.error("yfinance or pandas not installed")
-            return None
-        
-        loop = asyncio.get_event_loop()
-        
-        def _fetch():
-            try:
-                yahoo_symbol = self._convert_symbol_to_yahoo(symbol)
-                interval = self.YAHOO_INTERVALS.get(timeframe, "1d")
-                
-                # Yahoo has limitations on intraday data
-                # 1m data: max 7 days
-                # 5m-30m data: max 60 days
-                # 1h data: max 730 days
-                
-                ticker = yf.Ticker(yahoo_symbol)
-                df = ticker.history(
-                    start=start_date,
-                    end=end_date,
-                    interval=interval,
-                    auto_adjust=True
-                )
-                
-                if df is None or len(df) == 0:
-                    logger.warning(f"No data from Yahoo for {yahoo_symbol}")
-                    return None
-                
-                # Standardize columns
-                df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
-                
-                # Handle 4H timeframe (resample from 1H)
-                if timeframe == TimeFrame.H4:
-                    df = df.resample('4H').agg({
-                        'Open': 'first',
-                        'High': 'max',
-                        'Low': 'min',
-                        'Close': 'last',
-                        'Volume': 'sum'
-                    }).dropna()
-                
-                logger.info(f"Yahoo: Fetched {len(df)} bars for {yahoo_symbol}")
-                return df
-                
-            except Exception as e:
-                logger.error(f"Yahoo data fetch error: {e}")
-                return None
-        
-        return await loop.run_in_executor(self.executor, _fetch)
-    
+
     async def fetch_data(
         self,
         symbol: str,
         timeframe: TimeFrame,
         start_date: datetime,
         end_date: datetime,
-        source: DataSource = DataSource.AUTO
+        source: DataSource = DataSource.MT5
     ) -> Tuple[Optional[pd.DataFrame], DataSource]:
         """
-        Fetch data with automatic failover
-        Returns: (DataFrame, actual_source_used)
+        Fetch data from MT5
+        Returns: (DataFrame, DataSource.MT5)
+        Raises exception with clear error message if data fetch fails
         """
         if pd is None:
             raise ImportError("pandas is required for backtesting")
         
-        # Determine source
-        if source == DataSource.MT5:
-            df = await self.fetch_mt5_data(symbol, timeframe, start_date, end_date)
-            if df is not None:
-                return df, DataSource.MT5
-            return None, DataSource.MT5
+        df, error = await self.fetch_mt5_data(symbol, timeframe, start_date, end_date)
         
-        elif source == DataSource.YAHOO:
-            df = await self.fetch_yahoo_data(symbol, timeframe, start_date, end_date)
-            if df is not None:
-                return df, DataSource.YAHOO
-            return None, DataSource.YAHOO
+        if df is not None and len(df) > 0:
+            self._last_error = ""
+            return df, DataSource.MT5
         
-        else:  # AUTO mode - Use Yahoo Finance by default (no MT5 auto-connect)
-            # Yahoo Finance is the default for backtesting
-            # MT5 is only used if explicitly enabled by user
-            logger.info(f"AUTO mode: Using Yahoo Finance for {symbol}")
-            
-            df = await self.fetch_yahoo_data(symbol, timeframe, start_date, end_date)
-            if df is not None:
-                return df, DataSource.YAHOO
-            
-            # Only try MT5 if explicitly enabled AND Yahoo failed
-            if self._mt5_enabled:
-                logger.info("Yahoo failed, trying MT5 (user enabled)")
-                df = await self.fetch_mt5_data(symbol, timeframe, start_date, end_date)
-                if df is not None and len(df) > 0:
-                    return df, DataSource.MT5
-            
-            return None, DataSource.AUTO
+        # Store error for debugging
+        self._last_error = error
+        logger.error(f"Failed to load data for {symbol}: {error}")
+        
+        return None, DataSource.MT5
     
-    async def get_available_symbols(self, source: DataSource = DataSource.AUTO) -> List[str]:
-        """Get list of available symbols - returns Yahoo Finance symbols by default"""
-        # Always return common symbols from Yahoo Finance
-        # MT5 symbols only if explicitly requested AND enabled
-        symbols = list(self.SYMBOL_MAP.keys())
+    def get_last_error(self) -> str:
+        """Get the last error message"""
+        return self._last_error
+    
+    async def get_available_symbols(self, source: DataSource = DataSource.MT5) -> List[str]:
+        """Get list of available symbols from MT5"""
+        if not MT5_AVAILABLE:
+            return self.COMMON_SYMBOLS
         
-        if source == DataSource.MT5 and self._mt5_enabled:
-            loop = asyncio.get_event_loop()
-            def _get_symbols():
-                try:
-                    all_symbols = mt5.symbols_get()
-                    if all_symbols:
-                        return [s.name for s in all_symbols if s.visible]
-                except:
-                    pass
-                return []
-            mt5_symbols = await loop.run_in_executor(self.executor, _get_symbols)
-            if mt5_symbols:
-                symbols = mt5_symbols
+        loop = asyncio.get_event_loop()
         
-        return symbols
+        def _get_symbols():
+            try:
+                success, _ = self._ensure_mt5_initialized()
+                if not success:
+                    return self.COMMON_SYMBOLS
+                
+                all_symbols = mt5.symbols_get()
+                if all_symbols:
+                    symbols = [s.name for s in all_symbols if s.visible]
+                    if symbols:
+                        return symbols
+            except Exception as e:
+                logger.error(f"Error getting MT5 symbols: {e}")
+            
+            return self.COMMON_SYMBOLS
+        
+        try:
+            return await loop.run_in_executor(self.executor, _get_symbols)
+        except Exception:
+            return self.COMMON_SYMBOLS
+    
+    async def get_symbol_info(self, symbol: str) -> Optional[Dict]:
+        """Get symbol information from MT5"""
+        if not MT5_AVAILABLE:
+            return None
+        
+        loop = asyncio.get_event_loop()
+        
+        def _get_info():
+            try:
+                success, _ = self._ensure_mt5_initialized()
+                if not success:
+                    return None
+                
+                symbol_to_use = self._find_symbol(symbol)
+                if symbol_to_use is None:
+                    return None
+                
+                info = mt5.symbol_info(symbol_to_use)
+                if info is None:
+                    return None
+                
+                return {
+                    "symbol": info.name,
+                    "description": info.description,
+                    "point": info.point,
+                    "digits": info.digits,
+                    "spread": info.spread,
+                    "trade_contract_size": info.trade_contract_size,
+                    "volume_min": info.volume_min,
+                    "volume_max": info.volume_max,
+                    "volume_step": info.volume_step,
+                    "bid": info.bid,
+                    "ask": info.ask,
+                }
+            except Exception as e:
+                logger.error(f"Error getting symbol info: {e}")
+                return None
+        
+        try:
+            return await loop.run_in_executor(self.executor, _get_info)
+        except Exception:
+            return None
+    
+    async def get_current_price(self, symbol: str) -> Optional[Dict]:
+        """Get current price from MT5"""
+        if not MT5_AVAILABLE:
+            return None
+        
+        loop = asyncio.get_event_loop()
+        
+        def _get_price():
+            try:
+                success, _ = self._ensure_mt5_initialized()
+                if not success:
+                    return None
+                
+                symbol_to_use = self._find_symbol(symbol)
+                if symbol_to_use is None:
+                    return None
+                
+                tick = mt5.symbol_info_tick(symbol_to_use)
+                if tick is None:
+                    return None
+                
+                return {
+                    "symbol": symbol_to_use,
+                    "bid": tick.bid,
+                    "ask": tick.ask,
+                    "last": tick.last,
+                    "volume": tick.volume,
+                    "time": datetime.fromtimestamp(tick.time)
+                }
+            except Exception as e:
+                logger.error(f"Error getting current price: {e}")
+                return None
+        
+        try:
+            return await loop.run_in_executor(self.executor, _get_price)
+        except Exception:
+            return None
 
 
 # Global instance

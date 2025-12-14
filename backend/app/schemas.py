@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from datetime import datetime
-from app.models import SubscriptionTier, AccountType
+from app.models import SubscriptionTier, AccountType, UserRole
 
 
 # User Schemas
@@ -23,6 +23,7 @@ class UserResponse(UserBase):
     id: int
     is_active: bool
     is_verified: bool
+    role: UserRole
     subscription_tier: SubscriptionTier
     api_key: Optional[str] = None
     websocket_url: Optional[str] = None

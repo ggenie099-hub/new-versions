@@ -8,7 +8,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any, Callable
+from typing import Optional, List, Dict, Any, Callable, Tuple
 import numpy as np
 
 try:
@@ -44,26 +44,36 @@ class BacktestEngine:
         self._trade_id: int = 0
         self._bar_index: int = 0
     
-    async def load_data(self, config: BacktestConfig) -> bool:
-        """Load historical data based on config"""
+    async def load_data(self, config: BacktestConfig) -> Tuple[bool, str]:
+        """
+        Load historical data based on config
+        Returns: (success, error_message)
+        """
         self.config = config
         
-        df, source = await data_fetcher.fetch_data(
-            symbol=config.symbol,
-            timeframe=config.timeframe,
-            start_date=config.start_date,
-            end_date=config.end_date,
-            source=config.data_source
-        )
-        
-        if df is None or len(df) == 0:
-            logger.error(f"Failed to load data for {config.symbol}")
-            return False
-        
-        self.data = df
-        self._data_source = source
-        logger.info(f"Loaded {len(df)} bars from {source.value}")
-        return True
+        try:
+            df, source = await data_fetcher.fetch_data(
+                symbol=config.symbol,
+                timeframe=config.timeframe,
+                start_date=config.start_date,
+                end_date=config.end_date,
+                source=config.data_source
+            )
+            
+            if df is None or len(df) == 0:
+                error_msg = data_fetcher.get_last_error() or f"No data available for {config.symbol}"
+                logger.error(f"Failed to load data for {config.symbol}: {error_msg}")
+                return False, error_msg
+            
+            self.data = df
+            self._data_source = source
+            logger.info(f"Loaded {len(df)} bars from {source.value}")
+            return True, ""
+            
+        except Exception as e:
+            error_msg = f"Data loading error: {str(e)}"
+            logger.error(error_msg)
+            return False, error_msg
     
     def _calculate_position_size(self, price: float, stop_loss: Optional[float] = None) -> float:
         """Calculate position size based on risk management"""
@@ -288,8 +298,9 @@ class BacktestEngine:
         
         if config:
             self.config = config
-            if not await self.load_data(config):
-                raise ValueError("Failed to load data")
+            success, error_msg = await self.load_data(config)
+            if not success:
+                raise ValueError(f"Failed to load data: {error_msg}")
         
         if self.data is None or self.config is None:
             raise ValueError("No data loaded. Call load_data() first.")
