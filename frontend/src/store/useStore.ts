@@ -7,6 +7,7 @@ interface User {
   api_key: string;
   websocket_url: string;
   subscription_tier: string;
+  role?: string;
 }
 
 interface MT5Account {
