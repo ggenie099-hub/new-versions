@@ -76,7 +76,7 @@ export default function TradeReadinessMeter({ data, loading }: TradeReadinessPro
       </div>
 
       {/* Gauge Visualization */}
-      <div className="relative flex justify-center mb-6">
+      <div className="flex flex-col items-center mb-4">
         <div className="relative w-48 h-24 overflow-hidden">
           {/* Background arc */}
           <div className="absolute inset-0 border-8 border-gray-200 dark:border-gray-700 rounded-t-full"></div>
@@ -99,15 +99,15 @@ export default function TradeReadinessMeter({ data, loading }: TradeReadinessPro
           <div className="absolute bottom-0 left-1/2 w-4 h-4 -translate-x-1/2 translate-y-1/2 bg-gray-800 dark:bg-white rounded-full"></div>
         </div>
         
-        {/* Score display */}
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-8 text-center">
+        {/* Score display - separate from gauge with proper spacing */}
+        <div className="mt-6 text-center">
           <span className={`text-4xl font-bold ${colorMap[data.color_code]}`}>{data.score.toFixed(0)}</span>
           <span className="text-gray-500 dark:text-gray-400 text-lg">%</span>
         </div>
       </div>
 
       {/* Indicators */}
-      <div className="grid grid-cols-2 gap-2 mb-4 mt-8">
+      <div className="grid grid-cols-2 gap-2 mb-4">
         <div className={`flex items-center gap-2 p-2 rounded ${data.momentum_aligned ? 'bg-green-500/10' : 'bg-gray-100 dark:bg-gray-700'}`}>
           {data.momentum_aligned ? <CheckCircle size={16} className="text-green-500" /> : <XCircle size={16} className="text-gray-400" />}
           <span className="text-sm text-gray-700 dark:text-gray-300">Momentum</span>

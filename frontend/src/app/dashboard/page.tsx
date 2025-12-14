@@ -46,19 +46,23 @@ export default function DashboardPage() {
   const [selectedSymbol, setSelectedSymbol] = useState('EURUSD');
 
   // Load analytics data
-  const loadAnalytics = useCallback(async () => {
+  const loadAnalytics = useCallback(async (showLoading = true) => {
     if (!activeAccount?.is_connected) return;
     
-    setAnalyticsLoading(true);
+    if (showLoading && !analytics) {
+      setAnalyticsLoading(true);
+    }
     try {
       const response = await analyticsAPI.getFullAnalytics(selectedSymbol);
       setAnalytics(response.data);
     } catch (error) {
       console.error('Failed to load analytics:', error);
     } finally {
-      setAnalyticsLoading(false);
+      if (showLoading) {
+        setAnalyticsLoading(false);
+      }
     }
-  }, [activeAccount, selectedSymbol]);
+  }, [activeAccount, selectedSymbol, analytics]);
 
   useEffect(() => {
     loadDashboardData();
@@ -127,14 +131,9 @@ export default function DashboardPage() {
       const positionsData = positionsRes.data.positions || [];
       setPositions(positionsData);
       
-      // Also refresh analytics silently
+      // Also refresh analytics silently (no loading indicator)
       if (activeAccount.is_connected) {
-        try {
-          const analyticsRes = await analyticsAPI.getFullAnalytics(selectedSymbol);
-          setAnalytics(analyticsRes.data);
-        } catch (e) {
-          // Silent fail for analytics
-        }
+        loadAnalytics(false);
       }
     } catch (error) {
       console.error('Auto-sync failed:', error);

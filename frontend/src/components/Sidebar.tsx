@@ -107,7 +107,7 @@ export default function Sidebar() {
 
           {/* User info (hidden in minimized state) */}
           {user && !sidebarMinimized && (
-            <div className="p-4 border-b border-gray-200 dark:border-gray-800">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-800 mt-2">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold">
                   {user.username.charAt(0).toUpperCase()}
@@ -125,7 +125,7 @@ export default function Sidebar() {
           )}
 
           {/* Navigation */}
-          <nav className={clsx('flex-1 overflow-y-auto space-y-1', sidebarMinimized ? 'p-2' : 'p-4')}>
+          <nav className={clsx('flex-1 overflow-y-auto space-y-1', sidebarMinimized ? 'p-2 pt-6' : 'p-4 pt-6')}>
             {navigation.map((item) => {
               const isActive = pathname === item.href;
               return (
