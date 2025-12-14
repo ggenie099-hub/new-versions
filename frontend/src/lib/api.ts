@@ -115,3 +115,23 @@ export const notificationAPI = {
   deleteNotification: (id: number) => api.delete(`/notifications/${id}`),
   clearAll: () => api.delete('/notifications/clear-all'),
 };
+
+// Analytics APIs - AI Trading Decision Intelligence
+export const analyticsAPI = {
+  getFullAnalytics: (symbol: string = 'EURUSD') =>
+    api.get('/analytics/full', { params: { symbol } }),
+  getMarketRegime: (symbol: string = 'EURUSD') =>
+    api.get('/analytics/market-regime', { params: { symbol } }),
+  getTradeReadiness: (symbol: string = 'EURUSD') =>
+    api.get('/analytics/trade-readiness', { params: { symbol } }),
+  getRiskStatus: () => api.get('/analytics/risk-status'),
+  getSessionIntelligence: (symbol: string = 'EURUSD') =>
+    api.get('/analytics/session-intelligence', { params: { symbol } }),
+  getMarketNarrative: (symbol: string = 'EURUSD') =>
+    api.get('/analytics/market-narrative', { params: { symbol } }),
+  getTradeBlocker: (symbol: string = 'EURUSD') =>
+    api.get('/analytics/trade-blocker', { params: { symbol } }),
+  getTradeQuality: (ticket: number) =>
+    api.get(`/analytics/trade-quality/${ticket}`),
+  getStrategyHealth: () => api.get('/analytics/strategy-health'),
+};

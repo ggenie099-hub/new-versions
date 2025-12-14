@@ -1,11 +1,35 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useStore } from '@/store/useStore';
-import { mt5API, tradeAPI, watchlistAPI } from '@/lib/api';
-import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
+import { mt5API, tradeAPI, analyticsAPI } from '@/lib/api';
+import { Activity, DollarSign, TrendingUp, TrendingDown, RefreshCw, Brain } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+// Analytics Components
+import {
+  MarketRegimeCard,
+  TradeReadinessMeter,
+  RiskStatusCard,
+  SessionIntelligenceCard,
+  MarketNarrativeCard,
+  TradeBlockerCard,
+  TradeQualityCard,
+  StrategyHealthCard,
+} from '@/components/analytics';
+
+// Analytics data type
+interface AnalyticsData {
+  market_regime: any;
+  trade_readiness: any;
+  risk_status: any;
+  session_intelligence: any;
+  market_narrative: any;
+  trade_blocker: any;
+  trade_qualities: any[];
+  strategy_health: any[];
+}
 
 export default function DashboardPage() {
   const { activeAccount, setActiveAccount, trades, setTrades } = useStore();
@@ -14,11 +38,38 @@ export default function DashboardPage() {
   const [positions, setPositions] = useState<any[]>([]);
   const [mt5Accounts, setMT5Accounts] = useState<any[]>([]);
   const [autoSync, setAutoSync] = useState(true);
-  const [syncInterval, setSyncInterval] = useState(10); // seconds
+  const [syncInterval, setSyncInterval] = useState(10);
+  
+  // Analytics state
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [selectedSymbol, setSelectedSymbol] = useState('EURUSD');
+
+  // Load analytics data
+  const loadAnalytics = useCallback(async () => {
+    if (!activeAccount?.is_connected) return;
+    
+    setAnalyticsLoading(true);
+    try {
+      const response = await analyticsAPI.getFullAnalytics(selectedSymbol);
+      setAnalytics(response.data);
+    } catch (error) {
+      console.error('Failed to load analytics:', error);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, [activeAccount, selectedSymbol]);
 
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  // Load analytics when account connects
+  useEffect(() => {
+    if (activeAccount?.is_connected) {
+      loadAnalytics();
+    }
+  }, [activeAccount?.is_connected, loadAnalytics]);
 
   // Auto-sync effect
   useEffect(() => {
@@ -45,14 +96,10 @@ export default function DashboardPage() {
       if (connectedAccount) {
         setActiveAccount(connectedAccount);
         
-        // Load positions for connected account
         try {
           const positionsRes = await tradeAPI.syncPositions(connectedAccount.id);
-          console.log('Positions response:', positionsRes.data);
-          // The backend returns { positions: [...], message: "...", total_positions: N }
           const positionsData = positionsRes.data.positions || [];
           setPositions(positionsData);
-          console.log('Loaded positions:', positionsData.length);
         } catch (error) {
           console.error('Failed to load positions:', error);
           setPositions([]);
@@ -71,18 +118,24 @@ export default function DashboardPage() {
     if (!activeAccount || syncing) return;
 
     try {
-      // Sync account data silently
       const accountRes = await mt5API.syncAccount(activeAccount.id);
       if (accountRes.data.account) {
         setActiveAccount(accountRes.data.account);
       }
       
-      // Sync positions from MT5
       const positionsRes = await tradeAPI.syncPositions(activeAccount.id);
       const positionsData = positionsRes.data.positions || [];
       setPositions(positionsData);
       
-      console.log(`Auto-synced: ${positionsData.length} positions`);
+      // Also refresh analytics silently
+      if (activeAccount.is_connected) {
+        try {
+          const analyticsRes = await analyticsAPI.getFullAnalytics(selectedSymbol);
+          setAnalytics(analyticsRes.data);
+        } catch (e) {
+          // Silent fail for analytics
+        }
+      }
     } catch (error) {
       console.error('Auto-sync failed:', error);
     }
@@ -96,18 +149,16 @@ export default function DashboardPage() {
 
     setSyncing(true);
     try {
-      // Sync account data (balance, equity, etc.)
       await mt5API.syncAccount(activeAccount.id);
       
-      // Sync positions from MT5
       const positionsRes = await tradeAPI.syncPositions(activeAccount.id);
       const positionsData = positionsRes.data.positions || [];
       setPositions(positionsData);
       
-      // Reload all dashboard data
       await loadDashboardData();
+      await loadAnalytics();
       
-      toast.success(`Account synced successfully. ${positionsData.length} open position(s) found.`);
+      toast.success(`Synced successfully. ${positionsData.length} position(s) found.`);
     } catch (error: any) {
       const message = error?.response?.data?.detail || 'Failed to sync account';
       toast.error(message);
@@ -157,51 +208,70 @@ export default function DashboardPage() {
     );
   }
 
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+              <Brain className="text-purple-500" size={32} />
+              AI Trading Intelligence
+            </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Welcome back! Here's your trading overview.
+              Real-time market analysis and trade decision support
             </p>
           </div>
           <div className="flex items-center space-x-4">
-            {/* Auto-sync toggle */}
-            <div className="flex items-center space-x-2">
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={autoSync}
-                  onChange={(e) => setAutoSync(e.target.checked)}
-                  className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 dark:focus:ring-primary-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-                />
-                <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
-                  Auto-sync ({syncInterval}s)
-                </span>
-              </label>
-            </div>
+            {/* Symbol Selector */}
+            <select
+              value={selectedSymbol}
+              onChange={(e) => setSelectedSymbol(e.target.value)}
+              className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
+            >
+              <option value="EURUSD">EURUSD</option>
+              <option value="GBPUSD">GBPUSD</option>
+              <option value="USDJPY">USDJPY</option>
+              <option value="XAUUSD">XAUUSD</option>
+              <option value="BTCUSD">BTCUSD</option>
+            </select>
             
-            {/* Manual sync button */}
+            {/* Auto-sync toggle */}
+            <label className="flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoSync}
+                onChange={(e) => setAutoSync(e.target.checked)}
+                className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded"
+              />
+              <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+                Auto ({syncInterval}s)
+              </span>
+            </label>
+            
             <button
               onClick={handleSync}
               disabled={syncing || !activeAccount}
-              className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
             >
               <RefreshCw size={18} className={syncing ? 'animate-spin' : ''} />
-              <span>{syncing ? 'Syncing...' : 'Sync Now'}</span>
+              <span>{syncing ? 'Syncing...' : 'Sync'}</span>
             </button>
           </div>
         </div>
 
+        {/* Trade Blocker Alert - Always visible at top if blocked */}
+        {analytics?.trade_blocker && (
+          <TradeBlockerCard data={analytics.trade_blocker} loading={analyticsLoading} />
+        )}
+
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {stats.map((stat) => (
             <div
               key={stat.name}
-              className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700"
+              className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700"
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -218,8 +288,50 @@ export default function DashboardPage() {
           ))}
         </div>
 
+        {/* AI Analytics Section */}
+        {activeAccount?.is_connected ? (
+          <>
+            {/* Row 1: Market Regime + Trade Readiness */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <MarketRegimeCard data={analytics?.market_regime} loading={analyticsLoading} />
+              <TradeReadinessMeter data={analytics?.trade_readiness} loading={analyticsLoading} />
+            </div>
+
+            {/* Row 2: Risk Status + Session Intelligence */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <RiskStatusCard data={analytics?.risk_status} loading={analyticsLoading} />
+              <SessionIntelligenceCard data={analytics?.session_intelligence} loading={analyticsLoading} />
+            </div>
+
+            {/* Row 3: AI Market Narrative - Full Width */}
+            <MarketNarrativeCard data={analytics?.market_narrative} loading={analyticsLoading} />
+
+            {/* Row 4: Trade Quality + Strategy Health */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <TradeQualityCard data={analytics?.trade_qualities || []} loading={analyticsLoading} />
+              <StrategyHealthCard data={analytics?.strategy_health || []} loading={analyticsLoading} />
+            </div>
+          </>
+        ) : (
+          <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 p-8 rounded-xl border border-purple-500/20 text-center">
+            <Brain size={48} className="mx-auto text-purple-500 mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              AI Analytics Available
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-4">
+              Connect your MT5 account to unlock AI-powered market analysis and trade decision support.
+            </p>
+            <a
+              href="/dashboard/account"
+              className="inline-block px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              Connect MT5 Account
+            </a>
+          </div>
+        )}
+
         {/* Account Info */}
-        {activeAccount ? (
+        {activeAccount && (
           <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
               Active MT5 Account
@@ -255,21 +367,9 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-        ) : (
-          <div className="bg-white dark:bg-gray-800 p-8 rounded-xl border border-gray-200 dark:border-gray-700 text-center">
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
-              No MT5 account connected. Connect your account to start trading.
-            </p>
-            <a
-              href="/dashboard/account"
-              className="inline-block px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              Connect MT5 Account
-            </a>
-          </div>
         )}
 
-        {/* Open Positions */}
+        {/* Open Positions Table */}
         <div className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
@@ -278,7 +378,7 @@ export default function DashboardPage() {
             {autoSync && activeAccount && (
               <div className="flex items-center space-x-2 text-sm text-green-600 dark:text-green-400">
                 <div className="w-2 h-2 bg-green-600 dark:bg-green-400 rounded-full animate-pulse"></div>
-                <span>Live updates active</span>
+                <span>Live updates</span>
               </div>
             )}
           </div>
@@ -287,44 +387,20 @@ export default function DashboardPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-200 dark:border-gray-700">
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">
-                      Ticket
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">
-                      Broker
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">
-                      Symbol
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">
-                      Type
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">
-                      Volume
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">
-                      Open Price
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">
-                      Current Price
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">
-                      Profit
-                    </th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">Ticket</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">Symbol</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">Type</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">Volume</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">Open</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">Current</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-600 dark:text-gray-400">Profit</th>
                   </tr>
                 </thead>
                 <tbody>
                   {positions.map((position, index) => (
-                    <tr key={index} className="border-b border-gray-200 dark:border-gray-700">
-                      <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">
-                        {position.ticket}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">
-                        {(activeAccount as any)?.broker || activeAccount?.server || 'N/A'}
-                      </td>
-                      <td className="py-3 px-4 text-sm font-semibold text-gray-900 dark:text-white">
-                        {position.symbol}
-                      </td>
+                    <tr key={index} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{position.ticket}</td>
+                      <td className="py-3 px-4 text-sm font-semibold text-gray-900 dark:text-white">{position.symbol}</td>
                       <td className="py-3 px-4">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                           position.type === 'BUY'
@@ -334,19 +410,11 @@ export default function DashboardPage() {
                           {position.type}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">
-                        {position.volume}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">
-                        {position.price_open?.toFixed(5) || 'N/A'}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">
-                        {position.price_current?.toFixed(5) || 'N/A'}
-                      </td>
-                      <td className={`py-3 px-4 text-sm font-semibold ${
-                        position.profit >= 0 ? 'text-green-600' : 'text-red-600'
-                      }`}>
-                        ${position.profit?.toFixed(2) || '0.00'}
+                      <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{position.volume}</td>
+                      <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{position.price_open?.toFixed(5)}</td>
+                      <td className="py-3 px-4 text-sm text-gray-900 dark:text-white">{position.price_current?.toFixed(5)}</td>
+                      <td className={`py-3 px-4 text-sm font-semibold ${position.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        ${position.profit?.toFixed(2)}
                       </td>
                     </tr>
                   ))}
@@ -354,9 +422,7 @@ export default function DashboardPage() {
               </table>
             </div>
           ) : (
-            <p className="text-center text-gray-600 dark:text-gray-400 py-8">
-              No open positions
-            </p>
+            <p className="text-center text-gray-600 dark:text-gray-400 py-8">No open positions</p>
           )}
         </div>
       </div>

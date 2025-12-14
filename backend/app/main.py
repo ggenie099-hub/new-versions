@@ -4,6 +4,7 @@ from app.config import get_settings
 from app.routers import auth, mt5, trades, symbols, watchlist, notifications, websocket, webhook
 from app.agentic.routers import workflows, execution, nodes, scheduler
 from app.backtest.router import router as backtest_router
+from app.analytics.router import router as analytics_router
 
 settings = get_settings()
 
@@ -48,6 +49,9 @@ app.include_router(scheduler.router, prefix="/api/agentic")
 
 # Backtest system router
 app.include_router(backtest_router, prefix="/api")
+
+# Analytics system router
+app.include_router(analytics_router, prefix="/api")
 
 
 @app.get("/")
