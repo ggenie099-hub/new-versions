@@ -184,6 +184,7 @@ class ManualTriggerNode(BaseNode):
             triggered_by: User who triggered
         """
         triggered_by = self.config.get('user_id', 'unknown')
+        print(f"DEBUG: ManualTriggerNode executed by user {triggered_by}")
         
         return {
             'triggered_at': datetime.utcnow().isoformat(),

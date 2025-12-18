@@ -59,17 +59,40 @@ class EncryptionHandler:
     def __init__(self):
         # In production, use settings.ENCRYPTION_KEY
         # Ensure it's a valid Fernet key (32 url-safe base64-encoded bytes)
+        fallback_key = b'Zp7HPciAvlyAs6pcwSuHdmnrI1CPXiEOfMA5vb3XUNc='
+        
         try:
-            self.cipher = Fernet(settings.ENCRYPTION_KEY.encode())
-        except:
-            # Generate a new key for development
-            self.cipher = Fernet(Fernet.generate_key())
+            # Check if key is set and not the default placeholder
+            key = settings.ENCRYPTION_KEY
+            if not key or "your-encryption-key" in key or len(key) < 32:
+                self.cipher = Fernet(fallback_key)
+                print(f"ℹ️ Using development fallback encryption key (prefix: {fallback_key[:5].decode()})")
+            else:
+                # Try to use the provided key
+                try:
+                    self.cipher = Fernet(key.encode())
+                    print(f"ℹ️ Using ENCRYPTION_KEY from environment (prefix: {key[:5]})")
+                except Exception:
+                    print(f"⚠️ Invalid ENCRYPTION_KEY in .env. Using fallback.")
+                    self.cipher = Fernet(fallback_key)
+                    print(f"ℹ️ Using development fallback encryption key (prefix: {fallback_key[:5].decode()})")
+        except Exception as e:
+            print(f"⚠️ Encryption setup failed: {e}. Using fallback.")
+            self.cipher = Fernet(fallback_key)
     
     def encrypt(self, data: str) -> str:
-        return self.cipher.encrypt(data.encode()).decode()
+        try:
+            return self.cipher.encrypt(data.encode()).decode()
+        except Exception as e:
+            print(f"❌ Encryption failed: {e}")
+            raise
     
-    def decrypt(self, encrypted_data: str) -> str:
-        return self.cipher.decrypt(encrypted_data.encode()).decode()
+    def decrypt(self, encrypted_data: str) -> Optional[str]:
+        try:
+            return self.cipher.decrypt(encrypted_data.encode()).decode()
+        except Exception as e:
+            print(f"❌ Decryption failed: {e}. key_id: {self.cipher._signing_key[:5] if hasattr(self.cipher, '_signing_key') else 'unknown'}")
+            return None
 
 
 encryption_handler = EncryptionHandler()

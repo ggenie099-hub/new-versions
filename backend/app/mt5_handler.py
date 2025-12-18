@@ -31,6 +31,11 @@ class MT5Handler:
 
         def _init():
             try:
+                # Check if already initialized and connected
+                terminal_info = mt5.terminal_info()
+                if terminal_info is not None:
+                    return True
+                
                 ok = mt5.initialize()
                 if not ok:
                     logger.error("MT5 initialize failed: %s", self._format_last_error())
@@ -63,10 +68,17 @@ class MT5Handler:
 
         def _login():
             try:
+                # Always try to initialize first
                 if not mt5.initialize():
                     msg = f"MT5 initialization failed: {self._format_last_error()}"
                     logger.error(msg)
                     return False, msg
+
+                # Check if already logged in to this exact account
+                acc_info = mt5.account_info()
+                if acc_info is not None and acc_info.login == account and server.lower() in acc_info.server.lower():
+                    logger.info("Already logged in to account %s", account)
+                    return True, None
 
                 authorized = mt5.login(account, password=password, server=server)
                 if authorized:
@@ -90,6 +102,12 @@ class MT5Handler:
 
         def _get_info():
             try:
+                # Verify terminal is still initialized
+                if mt5.terminal_info() is None:
+                    if not mt5.initialize():
+                        logger.error("MT5 not initialized and automatic re-init failed.")
+                        return None
+
                 account_info = mt5.account_info()
                 if account_info is None:
                     logger.error("MT5 account_info returned None. Last error: %s", self._format_last_error())
@@ -104,6 +122,8 @@ class MT5Handler:
                     "profit": account_info.profit,
                     "leverage": account_info.leverage,
                     "currency": account_info.currency,
+                    "login": account_info.login,
+                    "server": account_info.server
                 }
             except Exception as e:
                 logger.exception("Exception during account_info retrieval: %s", e)
@@ -178,13 +198,26 @@ class MT5Handler:
         loop = asyncio.get_event_loop()
         
         def _place_order():
+            # Ensure terminal is initialized
+            if mt5.terminal_info() is None:
+                logger.info("MT5 NOT INITIALIZED during place_order. Attempting to initialize...")
+                if not mt5.initialize():
+                    logger.error("MT5 initialization failed in place_order: %s", self._format_last_error())
+                    return False, None, f"MT5 initialization failed: {self._format_last_error()}"
+
+            # Log order details
+            logger.info("Placing %s order for %s: volume=%s, sl=%s, tp=%s", order_type, symbol, volume, stop_loss, take_profit)
+
             # Get current price
             symbol_info = mt5.symbol_info(symbol)
             if symbol_info is None:
-                return False, None, f"Symbol {symbol} not found"
+                logger.error("Symbol info failed for %s: %s", symbol, self._format_last_error())
+                return False, None, f"Symbol {symbol} not found: {self._format_last_error()}"
             
             if not symbol_info.visible:
+                logger.info("Symbol %s not visible, selecting it...", symbol)
                 if not mt5.symbol_select(symbol, True):
+                    logger.error("Failed to select symbol %s: %s", symbol, self._format_last_error())
                     return False, None, f"Failed to select symbol {symbol}"
             
             # Determine order type
@@ -199,6 +232,7 @@ class MT5Handler:
             
             # Determine filling mode based on symbol
             filling_type = symbol_info.filling_mode
+            logger.info("Symbol %s filling_mode: %s", symbol, filling_type)
             
             # Try different filling modes in order of preference
             filling_modes = []
@@ -211,6 +245,7 @@ class MT5Handler:
             
             # Default to FOK if none specified
             if not filling_modes:
+                logger.warning("No filling modes detected for %s, trying defaults", symbol)
                 filling_modes = [mt5.ORDER_FILLING_FOK, mt5.ORDER_FILLING_IOC, mt5.ORDER_FILLING_RETURN]
             
             # Try each filling mode
@@ -235,15 +270,18 @@ class MT5Handler:
                 if take_profit:
                     request["tp"] = take_profit
                 
+                logger.info("Sending order request: %s", request)
                 # Send order
                 result = mt5.order_send(request)
                 
                 if result is None:
-                    last_error = "Order send failed"
+                    last_error = f"Order send failed (result is None). Last error: {self._format_last_error()}"
+                    logger.error(last_error)
                     continue
                 
                 if result.retcode == mt5.TRADE_RETCODE_DONE:
                     # Success!
+                    logger.info("Order placed successfully! Ticket: %s", result.order)
                     return True, {
                         "ticket": result.order,
                         "volume": result.volume,
@@ -255,14 +293,17 @@ class MT5Handler:
                 
                 # If unsupported filling mode, try next one
                 if result.retcode == mt5.TRADE_RETCODE_INVALID_FILL:
+                    logger.warning("Filling mode %s not supported for %s", filling_mode, symbol)
                     last_error = f"Filling mode {filling_mode} not supported"
                     continue
                 
                 # Other error, return immediately
-                last_error = f"Order failed: {result.comment}"
+                last_error = f"Order failed [retcode={result.retcode}]: {result.comment}"
+                logger.error(last_error)
                 break
             
             # All filling modes failed
+            logger.error("All filling modes failed for %s. Last error: %s", symbol, last_error)
             return False, None, last_error or "Order failed with all filling modes"
             
             return True, {

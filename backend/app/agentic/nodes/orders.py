@@ -24,7 +24,26 @@ class MarketOrderNode(BaseNode):
         if take_profit:
             take_profit = float(take_profit)
         
+        # Support test mode
+        test_mode = self.context.get('test_mode', False)
+        print(f"DEBUG: MarketOrderNode.execute - symbol={symbol}, type={order_type}, volume={volume}, test_mode={test_mode}")
+        
+        if test_mode:
+            print(f"DEBUG: MarketOrderNode - Simulating order (test_mode=True)")
+            return {
+                'success': True,
+                'ticket': 12345678,
+                'symbol': symbol,
+                'order_type': order_type,
+                'volume': volume,
+                'price': 1.0900,
+                'stop_loss': stop_loss,
+                'take_profit': take_profit,
+                'message': '[TEST MODE] Order placement simulated'
+            }
+        
         # Place order
+        print(f"DEBUG: MarketOrderNode - Calling mt5_handler.place_order for {symbol}")
         success, order_result, error = await mt5_handler.place_order(
             symbol=symbol,
             order_type=order_type,
@@ -35,8 +54,10 @@ class MarketOrderNode(BaseNode):
         )
         
         if not success:
+            print(f"DEBUG: MarketOrderNode - Order failed: {error}")
             raise Exception(f"Order failed: {error}")
         
+        print(f"DEBUG: MarketOrderNode - Order successful: {order_result['ticket']}")
         return {
             'success': True,
             'ticket': order_result['ticket'],

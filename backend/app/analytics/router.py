@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 from app.database import get_db
 from app.models import User, MT5Account, Trade
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, ensure_mt5_connected
 from app.mt5_handler import mt5_handler
 from app.security import encryption_handler
 
@@ -29,24 +29,6 @@ from .models import (
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 
-async def ensure_mt5_connected(account: MT5Account) -> bool:
-    """Ensure MT5 is connected for the given account"""
-    if not account.encrypted_password:
-        return False
-    
-    try:
-        password = encryption_handler.decrypt(account.encrypted_password)
-        await mt5_handler.initialize()
-        success, _ = await mt5_handler.login(
-            int(account.account_number), 
-            password, 
-            account.server
-        )
-        return success
-    except Exception:
-        return False
-
-
 @router.get("/market-regime", response_model=MarketRegime)
 async def get_market_regime(
     symbol: str = Query(default="EURUSD", description="Symbol to analyze"),
@@ -55,19 +37,17 @@ async def get_market_regime(
 ):
     """Get market regime analysis for a symbol"""
     
-    # Get connected MT5 account
+    # Get connected MT5 account or any account if none connected
     result = await db.execute(
-        select(MT5Account).filter(
-            MT5Account.user_id == current_user.id,
-            MT5Account.is_connected == True
-        )
+        select(MT5Account).filter(MT5Account.user_id == current_user.id)
+        .order_by(MT5Account.is_connected.desc())
     )
-    account = result.scalar_one_or_none()
+    account = result.scalars().first()
     
     if not account:
-        raise HTTPException(status_code=400, detail="No connected MT5 account")
+        raise HTTPException(status_code=400, detail="No MT5 account found. Please add an account first.")
     
-    connected = await ensure_mt5_connected(account)
+    connected = await ensure_mt5_connected(account, mt5_handler, encryption_handler)
     if not connected:
         raise HTTPException(status_code=400, detail="Failed to connect to MT5")
     
@@ -93,7 +73,7 @@ async def get_trade_readiness(
     if not account:
         raise HTTPException(status_code=400, detail="No connected MT5 account")
     
-    await ensure_mt5_connected(account)
+    await ensure_mt5_connected(account, mt5_handler, encryption_handler)
     return await analytics_engine.analyze_trade_readiness(symbol)
 
 
@@ -115,7 +95,7 @@ async def get_risk_status(
     if not account:
         raise HTTPException(status_code=400, detail="No connected MT5 account")
     
-    await ensure_mt5_connected(account)
+    await ensure_mt5_connected(account, mt5_handler, encryption_handler)
     
     # Get account info
     account_info = await mt5_handler.get_account_info()
@@ -149,7 +129,7 @@ async def get_session_intelligence(
     account = result.scalar_one_or_none()
     
     if account:
-        await ensure_mt5_connected(account)
+        await ensure_mt5_connected(account, mt5_handler, encryption_handler)
     
     return await analytics_engine.analyze_session_intelligence(symbol)
 
@@ -173,7 +153,7 @@ async def get_market_narrative(
     if not account:
         raise HTTPException(status_code=400, detail="No connected MT5 account")
     
-    await ensure_mt5_connected(account)
+    await ensure_mt5_connected(account, mt5_handler, encryption_handler)
     return await analytics_engine.generate_market_narrative(symbol)
 
 
@@ -196,7 +176,7 @@ async def get_trade_blocker(
     if not account:
         raise HTTPException(status_code=400, detail="No connected MT5 account")
     
-    await ensure_mt5_connected(account)
+    await ensure_mt5_connected(account, mt5_handler, encryption_handler)
     
     account_info = await mt5_handler.get_account_info()
     if not account_info:
@@ -228,7 +208,7 @@ async def get_trade_quality(
     if not account:
         raise HTTPException(status_code=400, detail="No connected MT5 account")
     
-    await ensure_mt5_connected(account)
+    await ensure_mt5_connected(account, mt5_handler, encryption_handler)
     
     # Get position
     positions = await mt5_handler.get_open_positions()
@@ -278,18 +258,17 @@ async def get_full_analytics(
 ):
     """Get complete analytics dashboard data in one call"""
     
+    # Get connected MT5 account or any account if none connected
     result = await db.execute(
-        select(MT5Account).filter(
-            MT5Account.user_id == current_user.id,
-            MT5Account.is_connected == True
-        )
+        select(MT5Account).filter(MT5Account.user_id == current_user.id)
+        .order_by(MT5Account.is_connected.desc())
     )
-    account = result.scalar_one_or_none()
+    account = result.scalars().first()
     
     if not account:
-        raise HTTPException(status_code=400, detail="No connected MT5 account")
+        raise HTTPException(status_code=400, detail="No MT5 account found. Please add an account first.")
     
-    connected = await ensure_mt5_connected(account)
+    connected = await ensure_mt5_connected(account, mt5_handler, encryption_handler)
     if not connected:
         raise HTTPException(status_code=400, detail="Failed to connect to MT5")
     

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import ReactFlow, {
   Node,
@@ -13,980 +13,389 @@ import ReactFlow, {
   Connection,
   MiniMap,
   Panel,
+  Handle,
+  Position,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { ArrowLeft, Save, Play, Plus, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft, Save, Play, Plus, Trash2,
+  Zap, Database, LineChart, Split, Shield,
+  ShoppingCart, Bell, Newspaper, Brain, Search,
+  Settings, Clock, Monitor, ChevronRight, HelpCircle,
+  LayoutTemplate, CheckCircle2, AlertCircle, Loader2
+} from 'lucide-react';
 
 interface NodeData {
   label: string;
   type: string;
   config: any;
+  category?: string;
 }
+
+const CATEGORY_STYLES: Record<string, { color: string, icon: any }> = {
+  triggers: { color: 'bg-purple-600', icon: Zap },
+  market_data: { color: 'bg-blue-600', icon: Database },
+  indicators: { color: 'bg-indigo-600', icon: LineChart },
+  conditions: { color: 'bg-orange-600', icon: Split },
+  risk_management: { color: 'bg-red-600', icon: Shield },
+  orders: { color: 'bg-green-600', icon: ShoppingCart },
+  notifications: { color: 'bg-yellow-600', icon: Bell },
+  news: { color: 'bg-cyan-600', icon: Newspaper },
+  memory: { color: 'bg-pink-600', icon: Brain },
+  default: { color: 'bg-gray-600', icon: Settings },
+};
+
+const CustomNode = ({ id, data, selected }: { id: string, data: NodeData, selected: boolean }) => {
+  const category = data.category || 'default';
+  const style = CATEGORY_STYLES[category] || CATEGORY_STYLES.default;
+  const Icon = style.icon;
+
+  const onAction = (action: string) => {
+    const event = new CustomEvent('nodeAction', { detail: { id, action } });
+    window.dispatchEvent(event);
+  };
+
+  return (
+    <div className={`group relative min-w-[240px] bg-[#0d0d12] border-2 rounded-2xl overflow-hidden transition-all duration-300 shadow-2xl ${selected ? 'border-blue-500 ring-4 ring-blue-500/10 scale-[1.02]' : 'border-gray-800/80 hover:border-gray-700'}`}>
+      <div className={`h-1.5 w-full ${style.color}`} />
+      <div className="flex items-center p-4 gap-4 relative">
+        <div className={`flex-shrink-0 p-3 rounded-2xl ${style.color} bg-opacity-20`}>
+          <Icon size={20} className={style.color.replace('bg-', 'text-')} />
+        </div>
+        <div className="flex-1 min-w-0 pr-10">
+          <h4 className="text-sm font-bold text-gray-100 truncate uppercase tracking-tight">{data.label}</h4>
+          <p className="text-[9px] text-gray-500 font-mono mt-1 opacity-60 uppercase">{data.type}</p>
+        </div>
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-200">
+          <button type="button" onClick={(e) => { e.stopPropagation(); onAction('settings'); }} className="p-2 hover:bg-gray-800 rounded-xl text-gray-400 hover:text-white"><Settings size={15} /></button>
+          <button type="button" onClick={(e) => { e.stopPropagation(); onAction('delete'); }} className="p-2 hover:bg-red-900/20 rounded-xl text-gray-400 hover:text-red-500"><Trash2 size={15} /></button>
+        </div>
+      </div>
+      <Handle type="target" position={Position.Left} className="!w-2.5 !h-2.5 !bg-gray-900 !border-2 !border-blue-500 !-left-[4px]" />
+      <Handle type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-gray-900 !border-2 !border-blue-500 !-right-[4px]" />
+    </div>
+  );
+};
+
+const nodeTypes = { custom: CustomNode };
 
 export default function WorkflowBuilderPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const workflowId = searchParams.get('id');
-  
-  const [workflowName, setWorkflowName] = useState('New Workflow');
-  const [workflowDescription, setWorkflowDescription] = useState('');
+
+  const [workflowName, setWorkflowName] = useState('My AI Strategy');
+  const [workflowDescription, setWorkflowDescription] = useState('Build your automated trading logic here.');
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [availableNodes, setAvailableNodes] = useState<any>(null);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [executing, setExecuting] = useState(false);
+  const [mt5Status, setMt5Status] = useState<'connected' | 'disconnected' | 'checking'>('checking');
 
   useEffect(() => {
-    fetchAvailableNodes();
-    if (workflowId) {
-      fetchWorkflow(workflowId);
-    } else {
-      setLoading(false);
-    }
-  }, [workflowId]);
-
-  const fetchAvailableNodes = async () => {
-    try {
-      const response = await fetch('http://localhost:8000/api/agentic/nodes/types');
-      if (response.ok) {
-        const data = await response.json();
-        setAvailableNodes(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch available nodes:', error);
-    }
-  };
-
-  const fetchWorkflow = async (id: string) => {
-    try {
-      const token = localStorage.getItem('access_token');
-      const response = await fetch(`http://localhost:8000/api/agentic/workflows/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
+    const checkMT5 = async () => {
+      try {
+        const token = localStorage.getItem('access_token');
+        const res = await fetch('http://localhost:8000/api/mt5/accounts', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const accounts = await res.json();
+          const connected = accounts.some((a: any) => a.is_connected);
+          setMt5Status(connected ? 'connected' : 'disconnected');
+        } else {
+          setMt5Status('disconnected');
         }
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setWorkflowName(data.name);
-        setWorkflowDescription(data.description);
-        
-        // Convert to React Flow format
-        if (data.nodes && data.nodes.length > 0) {
-          const flowNodes = data.nodes.map((node: any) => ({
-            id: node.id,
-            type: 'default',
-            position: node.position || { x: 100, y: 100 },
-            data: { 
-              label: node.type,
-              type: node.type,
-              config: node.data || {}
-            },
-            style: {
-              background: '#1f2937',
-              color: '#fff',
-              border: '2px solid #3b82f6',
-              borderRadius: '8px',
-              padding: '10px',
-              fontSize: '14px',
-              width: 180,
-            },
-          }));
-          setNodes(flowNodes);
-        }
-        
-        if (data.connections && data.connections.length > 0) {
-          const flowEdges = data.connections.map((conn: any, idx: number) => ({
-            id: `e${conn.source}-${conn.target}`,
-            source: conn.source,
-            target: conn.target,
-            animated: true
-          }));
-          setEdges(flowEdges);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch workflow:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge({ ...params, animated: true }, eds)),
-    [setEdges]
-  );
-
-  const onDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  }, []);
-
-  const onDrop = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault();
-
-      const type = event.dataTransfer.getData('application/reactflow');
-      const nodeName = event.dataTransfer.getData('nodeName');
-
-      if (typeof type === 'undefined' || !type) {
-        return;
-      }
-
-      const reactFlowBounds = event.currentTarget.getBoundingClientRect();
-      const position = {
-        x: event.clientX - reactFlowBounds.left - 100,
-        y: event.clientY - reactFlowBounds.top - 20,
-      };
-
-      const newNode: Node = {
-        id: `node-${Date.now()}`,
-        type: 'default',
-        position,
-        data: { 
-          label: nodeName || type,
-          type: type,
-          config: {}
-        },
-        style: {
-          background: '#1f2937',
-          color: '#fff',
-          border: '2px solid #3b82f6',
-          borderRadius: '8px',
-          padding: '10px',
-          fontSize: '14px',
-          width: 180,
-        },
-      };
-
-      setNodes((nds) => nds.concat(newNode));
-    },
-    [setNodes]
-  );
-
-  const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
-    setSelectedNode(node);
-  }, []);
-
-  const onPaneClick = useCallback(() => {
-    setSelectedNode(null);
-  }, []);
-
-  const updateNodeConfig = (nodeId: string, config: any) => {
-    setNodes((nds) =>
-      nds.map((node) => {
-        if (node.id === nodeId) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              config: config,
-            },
-          };
-        }
-        return node;
-      })
-    );
-  };
-
-  const deleteNode = (nodeId: string) => {
-    setNodes((nds) => nds.filter((node) => node.id !== nodeId));
-    setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
-    setSelectedNode(null);
-  };
-
-  const saveWorkflow = async () => {
-    try {
-      const token = localStorage.getItem('access_token');
-      
-      // Convert React Flow format to backend format
-      const workflowNodes = nodes.map((node) => ({
-        id: node.id,
-        type: node.data.type,
-        data: node.data.config,
-        position: node.position
-      }));
-
-      const workflowConnections = edges.map((edge) => ({
-        source: edge.source,
-        target: edge.target
-      }));
-
-      const workflowData = {
-        name: workflowName,
-        description: workflowDescription,
-        nodes: workflowNodes,
-        connections: workflowConnections,
-        settings: {},
-        trigger_type: 'manual'
-      };
-
-      const url = workflowId 
-        ? `http://localhost:8000/api/agentic/workflows/${workflowId}`
-        : 'http://localhost:8000/api/agentic/workflows';
-      
-      const method = workflowId ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method: method,
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(workflowData)
-      });
-
-      if (response.ok) {
-        alert('Workflow saved successfully!');
-        router.push('/dashboard/agentic');
-      } else {
-        alert('Failed to save workflow');
-      }
-    } catch (error) {
-      console.error('Failed to save workflow:', error);
-      alert('Error saving workflow');
-    }
-  };
-
-  const onDragStart = (event: React.DragEvent, nodeType: string, nodeName: string) => {
-    event.dataTransfer.setData('application/reactflow', nodeType);
-    event.dataTransfer.setData('nodeName', nodeName);
-    event.dataTransfer.effectAllowed = 'move';
-  };
-
-  const loadTemplate = (templateName: string) => {
-    const templates: any = {
-      'rsi-strategy': {
-        name: 'RSI Oversold Strategy',
-        description: 'Buy when RSI is oversold, with position sizing and risk management',
-        nodes: [
-          {
-            id: 'node-1',
-            type: 'default',
-            position: { x: 100, y: 100 },
-            data: { label: 'Manual Trigger', type: 'ManualTrigger', config: {} },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-2',
-            type: 'default',
-            position: { x: 350, y: 100 },
-            data: { label: 'Get Live Price', type: 'GetLivePrice', config: { symbol: 'EURUSD' } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-3',
-            type: 'default',
-            position: { x: 600, y: 100 },
-            data: { label: 'RSI', type: 'RSI', config: { period: 14, oversold: 30, overbought: 70 } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-4',
-            type: 'default',
-            position: { x: 350, y: 250 },
-            data: { label: 'Position Sizer', type: 'PositionSizer', config: { risk_percentage: 1.0, symbol: 'EURUSD' } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-5',
-            type: 'default',
-            position: { x: 600, y: 250 },
-            data: { label: 'Market Order', type: 'MarketOrder', config: { action: 'BUY', symbol: 'EURUSD', volume: 0.01 } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          }
-        ],
-        edges: [
-          { id: 'e1-2', source: 'node-1', target: 'node-2', animated: true },
-          { id: 'e2-3', source: 'node-2', target: 'node-3', animated: true },
-          { id: 'e3-4', source: 'node-3', target: 'node-4', animated: true },
-          { id: 'e4-5', source: 'node-4', target: 'node-5', animated: true }
-        ]
-      },
-      'price-breakout': {
-        name: 'Price Breakout Strategy',
-        description: 'Trigger when price breaks above resistance level',
-        nodes: [
-          {
-            id: 'node-1',
-            type: 'default',
-            position: { x: 100, y: 100 },
-            data: { label: 'Price Trigger', type: 'PriceTrigger', config: { symbol: 'EURUSD', condition: 'price > 1.10', check_interval: 5 } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-2',
-            type: 'default',
-            position: { x: 350, y: 100 },
-            data: { label: 'Risk/Reward Check', type: 'RiskRewardCalculator', config: { min_rr_ratio: 2.0 } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-3',
-            type: 'default',
-            position: { x: 600, y: 100 },
-            data: { label: 'Market Order', type: 'MarketOrder', config: { action: 'BUY', symbol: 'EURUSD', volume: 0.01 } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-4',
-            type: 'default',
-            position: { x: 850, y: 100 },
-            data: { label: 'Notification', type: 'DashboardNotification', config: { title: 'Trade Executed', message: 'Breakout trade placed', type: 'success' } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          }
-        ],
-        edges: [
-          { id: 'e1-2', source: 'node-1', target: 'node-2', animated: true },
-          { id: 'e2-3', source: 'node-2', target: 'node-3', animated: true },
-          { id: 'e3-4', source: 'node-3', target: 'node-4', animated: true }
-        ]
-      },
-      'daily-check': {
-        name: 'Daily Risk Check',
-        description: 'Check account status and risk limits every day at 9 AM',
-        nodes: [
-          {
-            id: 'node-1',
-            type: 'default',
-            position: { x: 100, y: 100 },
-            data: { label: 'Schedule Trigger', type: 'ScheduleTrigger', config: { cron_expression: '0 9 * * *', timezone: 'UTC' } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-2',
-            type: 'default',
-            position: { x: 350, y: 100 },
-            data: { label: 'Get Account Info', type: 'GetAccountInfo', config: {} },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-3',
-            type: 'default',
-            position: { x: 600, y: 100 },
-            data: { label: 'Drawdown Monitor', type: 'DrawdownMonitor', config: { max_drawdown_percentage: 10, alert_threshold: 5 } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-4',
-            type: 'default',
-            position: { x: 850, y: 100 },
-            data: { label: 'Daily Loss Limit', type: 'DailyLossLimit', config: { daily_loss_limit: 100, daily_loss_percentage: 2 } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-5',
-            type: 'default',
-            position: { x: 600, y: 250 },
-            data: { label: 'Notification', type: 'DashboardNotification', config: { title: 'Daily Check Complete', message: 'Account status checked', type: 'info' } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          }
-        ],
-        edges: [
-          { id: 'e1-2', source: 'node-1', target: 'node-2', animated: true },
-          { id: 'e2-3', source: 'node-2', target: 'node-3', animated: true },
-          { id: 'e3-4', source: 'node-3', target: 'node-4', animated: true },
-          { id: 'e4-5', source: 'node-4', target: 'node-5', animated: true }
-        ]
-      },
-      'scalping-15min': {
-        name: '15-Minute Scalping',
-        description: 'Quick scalping strategy that runs every 15 minutes',
-        nodes: [
-          {
-            id: 'node-1',
-            type: 'default',
-            position: { x: 100, y: 100 },
-            data: { label: 'Time Trigger', type: 'TimeTrigger', config: { interval_minutes: 15 } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-2',
-            type: 'default',
-            position: { x: 350, y: 100 },
-            data: { label: 'Get Live Price', type: 'GetLivePrice', config: { symbol: 'EURUSD' } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-3',
-            type: 'default',
-            position: { x: 600, y: 100 },
-            data: { label: 'Moving Average', type: 'MovingAverage', config: { period: 20, ma_type: 'EMA' } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-4',
-            type: 'default',
-            position: { x: 350, y: 250 },
-            data: { label: 'Max Positions Check', type: 'MaxPositions', config: { max_positions: 3, max_per_symbol: 1 } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-5',
-            type: 'default',
-            position: { x: 600, y: 250 },
-            data: { label: 'Market Order', type: 'MarketOrder', config: { action: 'BUY', symbol: 'EURUSD', volume: 0.01, stop_loss: 1.0800, take_profit: 1.0900 } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          }
-        ],
-        edges: [
-          { id: 'e1-2', source: 'node-1', target: 'node-2', animated: true },
-          { id: 'e2-3', source: 'node-2', target: 'node-3', animated: true },
-          { id: 'e3-4', source: 'node-3', target: 'node-4', animated: true },
-          { id: 'e4-5', source: 'node-4', target: 'node-5', animated: true }
-        ]
-      },
-      'macd-crossover': {
-        name: 'MACD Crossover Strategy',
-        description: 'Trade on MACD bullish/bearish crossovers',
-        nodes: [
-          {
-            id: 'node-1',
-            type: 'default',
-            position: { x: 100, y: 100 },
-            data: { label: 'Manual Trigger', type: 'ManualTrigger', config: {} },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-2',
-            type: 'default',
-            position: { x: 350, y: 100 },
-            data: { label: 'Get Live Price', type: 'GetLivePrice', config: { symbol: 'EURUSD' } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-3',
-            type: 'default',
-            position: { x: 600, y: 100 },
-            data: { label: 'MACD', type: 'MACD', config: { fast_period: 12, slow_period: 26, signal_period: 9 } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-4',
-            type: 'default',
-            position: { x: 850, y: 100 },
-            data: { label: 'Position Sizer', type: 'PositionSizer', config: { risk_percentage: 1.5, symbol: 'EURUSD' } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          },
-          {
-            id: 'node-5',
-            type: 'default',
-            position: { x: 600, y: 250 },
-            data: { label: 'Market Order', type: 'MarketOrder', config: { action: 'BUY', symbol: 'EURUSD', volume: 0.01 } },
-            style: { background: '#1f2937', color: '#fff', border: '2px solid #3b82f6', borderRadius: '8px', padding: '10px', fontSize: '14px', width: 180 }
-          }
-        ],
-        edges: [
-          { id: 'e1-2', source: 'node-1', target: 'node-2', animated: true },
-          { id: 'e2-3', source: 'node-2', target: 'node-3', animated: true },
-          { id: 'e3-4', source: 'node-3', target: 'node-4', animated: true },
-          { id: 'e4-5', source: 'node-4', target: 'node-5', animated: true }
-        ]
+      } catch (e) {
+        setMt5Status('disconnected');
       }
     };
 
-    const template = templates[templateName];
-    if (template) {
-      setWorkflowName(template.name);
-      setWorkflowDescription(template.description);
-      setNodes(template.nodes);
-      setEdges(template.edges);
-      
-      // Close templates menu
-      const menu = document.getElementById('templates-menu');
-      if (menu) menu.classList.add('hidden');
+    const init = async () => {
+      try {
+        const typesRes = await fetch('http://localhost:8000/api/agentic/nodes/types');
+        if (typesRes.ok) setAvailableNodes(await typesRes.json());
+
+        if (workflowId) {
+          const token = localStorage.getItem('access_token');
+          const res = await fetch(`http://localhost:8000/api/agentic/workflows/${workflowId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setWorkflowName(data.name);
+            setWorkflowDescription(data.description);
+            if (data.nodes) {
+              setNodes(data.nodes.map((n: any) => ({
+                id: n.id,
+                type: 'custom',
+                position: n.position || { x: 100, y: 100 },
+                data: { label: n.type, type: n.type, config: n.data || {}, category: 'default' }
+              })));
+            }
+            if (data.connections) {
+              setEdges(data.connections.map((c: any) => ({
+                id: `e${c.source}-${c.target}`,
+                source: c.source,
+                target: c.target,
+                animated: true
+              })));
+            }
+          }
+        }
+      } finally { setLoading(false); }
+    };
+    init();
+    checkMT5();
+  }, [workflowId, setNodes, setEdges]);
+
+  useEffect(() => {
+    const handleAction = (e: any) => {
+      const { id, action } = e.detail;
+      if (action === 'delete') {
+        setNodes((nds) => nds.filter((n) => n.id !== id));
+        setEdges((eds) => eds.filter((edge) => edge.source !== id && edge.target !== id));
+        setSelectedNode(null);
+      } else if (action === 'settings') {
+        const node = nodes.find(n => n.id === id);
+        if (node) setSelectedNode(node);
+      }
+    };
+    window.addEventListener('nodeAction', handleAction);
+    return () => window.removeEventListener('nodeAction', handleAction);
+  }, [nodes, setNodes, setEdges]);
+
+  const onConnect = useCallback((p: Connection) => setEdges((eds) => addEdge({ ...p, animated: true }, eds)), [setEdges]);
+  const onDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }, []);
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const type = e.dataTransfer.getData('application/reactflow');
+    if (!type) return;
+    const bounds = e.currentTarget.getBoundingClientRect();
+    const newNode: Node = {
+      id: `node-${Date.now()}`,
+      type: 'custom',
+      position: { x: e.clientX - bounds.left - 100, y: e.clientY - bounds.top - 20 },
+      data: { label: e.dataTransfer.getData('nodeName') || type, type: type, config: {}, category: e.dataTransfer.getData('category') || 'default' }
+    };
+    setNodes((nds) => nds.concat(newNode));
+  }, [setNodes]);
+
+  const loadExample = () => {
+    const exampleNodes: Node[] = [
+      { id: 'e1', type: 'custom', position: { x: 100, y: 200 }, data: { label: 'Manual Trigger', type: 'ManualTrigger', config: {}, category: 'triggers' } },
+      { id: 'e2', type: 'custom', position: { x: 400, y: 200 }, data: { label: 'RSI Check', type: 'RSI', config: { period: '14', oversold: '30' }, category: 'indicators' } },
+      { id: 'e3', type: 'custom', position: { x: 700, y: 200 }, data: { label: 'Position Sizer', type: 'PositionSizer', config: { risk: '1%' }, category: 'risk_management' } },
+      { id: 'e4', type: 'custom', position: { x: 1000, y: 200 }, data: { label: 'Market Order', type: 'MarketOrder', config: { symbol: 'EURUSD', order_type: 'BUY', volume: '0.01' }, category: 'orders' } },
+    ];
+    const exampleEdges: Edge[] = [
+      { id: 'ee1-2', source: 'e1', target: 'e2', animated: true },
+      { id: 'ee2-3', source: 'e2', target: 'e3', animated: true },
+      { id: 'ee3-4', source: 'e3', target: 'e4', animated: true },
+    ];
+    setWorkflowName("Scalp Hunter Bot");
+    setWorkflowDescription("A professional 4-node entry sequence.");
+    setNodes(exampleNodes);
+    setEdges(exampleEdges);
+    setShowTemplates(false);
+  };
+
+  const saveWF = async (silent = false) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const wf = {
+        name: workflowName,
+        description: workflowDescription,
+        nodes: nodes.map(n => ({ id: n.id, type: n.data.type, data: n.data.config, position: n.position })),
+        connections: edges.map(e => ({ source: e.source, target: e.target })),
+        trigger_type: 'manual'
+      };
+      const r = await fetch(workflowId ? `http://localhost:8000/api/agentic/workflows/${workflowId}` : 'http://localhost:8000/api/agentic/workflows', {
+        method: workflowId ? 'PUT' : 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(wf)
+      });
+      if (r.ok) {
+        if (!silent) alert('Successfully Saved! 🚀');
+        const data = await r.json();
+        return data.id || workflowId;
+      }
+    } catch (err) { console.error(err); }
+    return null;
+  };
+
+  const executeWF = async () => {
+    if (mt5Status !== 'connected') {
+      alert('MT5 Terminal is not connected! Please connect your account first.');
+      return;
+    }
+
+    setExecuting(true);
+    try {
+      const currentWfId = await saveWF(true);
+      if (!currentWfId) throw new Error('Failed to save workflow before execution');
+
+      const token = localStorage.getItem('access_token');
+      const r = await fetch(`http://localhost:8000/api/agentic/executions/workflows/${currentWfId}/execute`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test_mode: false })
+      });
+
+      const resData = await r.json();
+      if (r.ok) {
+        alert('Workflow Executed Successfully! Check your MT5 terminal. 📈');
+      } else {
+        alert(`Execution Failed: ${resData.detail || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setExecuting(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gray-900">
-        <div className="text-xl text-white">Loading workflow builder...</div>
-      </div>
-    );
-  }
+  if (loading) return <div className="h-screen bg-black flex items-center justify-center text-white font-black tracking-tighter text-xl">BOOTING ENGINE...</div>;
 
   return (
-    <div className="h-screen bg-gray-900 text-white flex flex-col">
-      {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 p-4 flex-shrink-0 relative">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => router.push('/dashboard/agentic')}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-            >
-              <ArrowLeft size={20} />
-              Back
-            </button>
-            <div>
-              <input
-                type="text"
-                value={workflowName}
-                onChange={(e) => setWorkflowName(e.target.value)}
-                className="text-2xl font-bold bg-transparent border-none outline-none focus:ring-2 focus:ring-blue-500 rounded px-2"
-                placeholder="Workflow Name"
-              />
-              <input
-                type="text"
-                value={workflowDescription}
-                onChange={(e) => setWorkflowDescription(e.target.value)}
-                className="text-sm text-gray-400 bg-transparent border-none outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 mt-1 block"
-                placeholder="Description"
-              />
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => {
-                const templates = document.getElementById('templates-menu');
-                if (templates) templates.classList.toggle('hidden');
-              }}
-              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition-colors relative"
-            >
-              <Plus size={20} />
-              Load Template
-            </button>
-            <button
-              onClick={saveWorkflow}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
-            >
-              <Save size={20} />
-              Save Workflow
-            </button>
-          </div>
-        </div>
-        
-        {/* Templates Dropdown Menu */}
-        <div id="templates-menu" className="hidden absolute top-16 right-4 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 w-80">
-          <div className="p-4">
-            <h3 className="text-lg font-semibold mb-3">Workflow Templates</h3>
-            <div className="space-y-2">
-              <button
-                onClick={() => loadTemplate('rsi-strategy')}
-                className="w-full text-left p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-              >
-                <div className="font-medium">RSI Oversold Strategy</div>
-                <div className="text-xs text-gray-400">Buy when RSI is oversold with risk management</div>
-              </button>
-              <button
-                onClick={() => loadTemplate('price-breakout')}
-                className="w-full text-left p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-              >
-                <div className="font-medium">Price Breakout Strategy</div>
-                <div className="text-xs text-gray-400">Trigger when price breaks resistance</div>
-              </button>
-              <button
-                onClick={() => loadTemplate('daily-check')}
-                className="w-full text-left p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-              >
-                <div className="font-medium">Daily Risk Check</div>
-                <div className="text-xs text-gray-400">Check account status every day at 9 AM</div>
-              </button>
-              <button
-                onClick={() => loadTemplate('scalping-15min')}
-                className="w-full text-left p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-              >
-                <div className="font-medium">15-Minute Scalping</div>
-                <div className="text-xs text-gray-400">Quick scalping every 15 minutes</div>
-              </button>
-              <button
-                onClick={() => loadTemplate('macd-crossover')}
-                className="w-full text-left p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
-              >
-                <div className="font-medium">MACD Crossover Strategy</div>
-                <div className="text-xs text-gray-400">Trade on MACD bullish/bearish crossovers</div>
-              </button>
+    <div className="h-screen bg-[#050507] text-white flex flex-col font-sans overflow-hidden">
+      <header className="bg-gray-900 border-b border-gray-800 p-4 flex items-center justify-between z-50 shadow-2xl shrink-0">
+        <div className="flex items-center gap-6">
+          <button onClick={() => router.push('/dashboard/agentic')} className="p-3 bg-gray-800/50 hover:bg-gray-800 rounded-2xl transition-all active:scale-90"><ArrowLeft size={20} /></button>
+          <div>
+            <input type="text" value={workflowName} onChange={(e) => setWorkflowName(e.target.value)} className="text-xl font-black bg-transparent border-none outline-none w-80 text-blue-400" />
+            <div className="flex items-center gap-3 mt-1">
+              <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1 ${mt5Status === 'connected' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
+                {mt5Status === 'connected' ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
+                MT5: {mt5Status.toUpperCase()}
+              </span>
+              <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Neural Trading Architecture</p>
             </div>
           </div>
         </div>
-      </div>
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <button onClick={() => setShowTemplates(!showTemplates)} className="flex items-center gap-2 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 px-5 py-2.5 rounded-2xl border border-indigo-500/20 font-bold transition-all">
+              <LayoutTemplate size={18} /> Templates
+            </button>
+            {showTemplates && (
+              <div className="absolute top-full right-0 mt-3 w-72 bg-gray-900 border border-gray-800 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden z-[100]">
+                <button onClick={loadExample} className="w-full p-6 text-left hover:bg-gray-800 transition-all border-b border-gray-800 group">
+                  <p className="font-black text-sm group-hover:text-blue-400">Scalp Hunter (4-Nodes)</p>
+                  <p className="text-[10px] text-gray-500 mt-1">Multi-stage entry with risk management.</p>
+                </button>
+              </div>
+            )}
+          </div>
+          <button onClick={() => setShowGuide(true)} className="flex items-center gap-2 bg-gray-800/50 hover:bg-gray-800 text-gray-300 px-5 py-2.5 rounded-2xl border border-gray-700 transition-all font-bold"><HelpCircle size={18} /> Guide</button>
+          <button onClick={() => saveWF()} className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-6 py-2.5 rounded-2xl font-bold transition-all active:scale-95"><Save size={18} /> Save</button>
+          <button
+            onClick={executeWF}
+            disabled={executing}
+            className={`flex items-center gap-2 px-8 py-2.5 rounded-2xl font-black shadow-lg transition-all active:scale-95 ${executing ? 'bg-gray-700 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 shadow-green-500/20'}`}
+          >
+            {executing ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} />}
+            {executing ? 'Executing...' : 'Run Live'}
+          </button>
+        </div>
+      </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Node Palette */}
-        <div className={`bg-gray-800 border-r border-gray-700 overflow-y-auto flex-shrink-0 transition-all duration-300 ${sidebarCollapsed ? 'w-12' : 'w-64'}`}>
-          {/* Collapse/Expand Button */}
-          <div className="flex items-center justify-between p-2 border-b border-gray-700">
-            {!sidebarCollapsed && <h3 className="text-sm font-semibold">Nodes</h3>}
-            <button
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="p-2 hover:bg-gray-700 rounded transition-colors"
-              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {sidebarCollapsed ? '→' : '←'}
-            </button>
+        <aside className={`bg-gray-900/40 border-r border-gray-800 flex flex-col transition-all duration-300 ${sidebarCollapsed ? 'w-20' : 'w-80'} shrink-0 relative z-40`}>
+          <div className="p-6 border-b border-gray-800 flex items-center justify-between">
+            {!sidebarCollapsed && <span className="font-black text-[10px] text-gray-500 tracking-[0.2em]">NODE MODULES</span>}
+            <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="p-2 bg-gray-800/50 hover:bg-gray-700 rounded-xl transition-all"><ChevronRight size={18} className={sidebarCollapsed ? '' : 'rotate-180'} /></button>
           </div>
-          
-          {!sidebarCollapsed && (
-            <div className="p-4">
-              <h3 className="text-lg font-semibold mb-4">Available Nodes</h3>
-            
-            {availableNodes && Object.entries(availableNodes.categories).map(([key, category]: [string, any]) => (
-              <div key={key} className="mb-6">
-                <h4 className="text-sm font-semibold text-gray-400 mb-2 uppercase">{category.name}</h4>
+          <div className="flex-1 overflow-y-auto p-5 space-y-8">
+            {availableNodes && Object.entries(availableNodes.categories).map(([k, c]: [string, any]) => (
+              <div key={k}>
+                {!sidebarCollapsed && <h4 className="text-[10px] text-gray-600 font-black mb-3 border-l-2 border-gray-800 pl-2">{c.name}</h4>}
                 <div className="space-y-2">
-                  {category.nodes && category.nodes.length > 0 && category.nodes.map((node: any) => (
-                    <div
-                      key={node.type}
-                      draggable
-                      onDragStart={(e) => onDragStart(e, node.type, node.name)}
-                      className="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors cursor-move text-sm"
-                    >
-                      <div className="font-medium">{node.name}</div>
-                      <div className="text-xs text-gray-400 truncate">{node.description}</div>
+                  {c.nodes.map((n: any) => (
+                    <div key={n.type} draggable onDragStart={(e) => { e.dataTransfer.setData('application/reactflow', n.type); e.dataTransfer.setData('nodeName', n.name); e.dataTransfer.setData('category', k); }} className="flex items-center gap-3 p-3 bg-gray-900/60 border border-gray-800 rounded-2xl cursor-grab hover:border-blue-500/50 transition-all active:cursor-grabbing group">
+                      <div className={`p-2 rounded-xl ${CATEGORY_STYLES[k]?.color || 'bg-gray-700'} bg-opacity-10`}>
+                        {CATEGORY_STYLES[k] && React.createElement(CATEGORY_STYLES[k].icon, { size: 16, className: CATEGORY_STYLES[k].color.replace('bg-', 'text-') })}
+                      </div>
+                      {!sidebarCollapsed && <span className="text-xs font-bold text-gray-300 group-hover:text-white">{n.name}</span>}
                     </div>
                   ))}
                 </div>
               </div>
             ))}
-            </div>
-          )}
-        </div>
-
-        {/* Canvas */}
-        <div className="flex-1 relative">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            onNodeClick={onNodeClick}
-            onPaneClick={onPaneClick}
-            fitView
-          >
-            <Background color="#374151" gap={16} />
-            <Controls />
-            <MiniMap 
-              nodeColor="#3b82f6"
-              maskColor="rgba(0, 0, 0, 0.6)"
-              className="bg-gray-800"
-            />
-            <Panel position="top-center" className="bg-gray-800 px-4 py-2 rounded-lg border border-gray-700">
-              <div className="text-sm text-gray-300">
-                Drag nodes from the left panel and drop them here
-              </div>
-            </Panel>
-          </ReactFlow>
-        </div>
-
-        {/* Properties Panel - Only show when node is selected */}
-        {selectedNode && (
-          <div className="w-80 bg-gray-800 border-l border-gray-700 overflow-y-auto flex-shrink-0">
-            <div className="p-4">
-              <h3 className="text-lg font-semibold mb-4">Node Configuration</h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Node Type</label>
-                  <div className="text-lg font-bold text-blue-500">{selectedNode.data.type}</div>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium mb-2">Node ID</label>
-                  <div className="text-xs text-gray-400 font-mono">{selectedNode.id}</div>
-                </div>
-
-                <div className="border-t border-gray-700 pt-4">
-                  <h4 className="text-sm font-semibold mb-3">Configuration</h4>
-                  
-                  {/* Dynamic form fields based on node type */}
-                  {(() => {
-                    const nodeType = selectedNode.data.type;
-                    const config = selectedNode.data.config || {};
-                    
-                    // Common fields for different node types
-                    if (nodeType === 'GetLivePrice' || nodeType === 'PriceTrigger') {
-                      return (
-                        <div className="space-y-3">
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Symbol</label>
-                            <input
-                              type="text"
-                              value={config.symbol || 'EURUSD'}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, symbol: e.target.value })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                              placeholder="EURUSD"
-                            />
-                          </div>
-                          {nodeType === 'PriceTrigger' && (
-                            <>
-                              <div>
-                                <label className="block text-xs font-medium mb-1">Condition</label>
-                                <input
-                                  type="text"
-                                  value={config.condition || 'price > 1.10'}
-                                  onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, condition: e.target.value })}
-                                  className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                                  placeholder="price > 1.10"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium mb-1">Check Interval (minutes)</label>
-                                <input
-                                  type="number"
-                                  value={config.check_interval || 5}
-                                  onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, check_interval: parseInt(e.target.value) })}
-                                  className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                                />
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      );
-                    }
-                    
-                    if (nodeType === 'RSI') {
-                      return (
-                        <div className="space-y-3">
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Period</label>
-                            <input
-                              type="number"
-                              value={config.period || 14}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, period: parseInt(e.target.value) })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Overbought Level</label>
-                            <input
-                              type="number"
-                              value={config.overbought || 70}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, overbought: parseInt(e.target.value) })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Oversold Level</label>
-                            <input
-                              type="number"
-                              value={config.oversold || 30}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, oversold: parseInt(e.target.value) })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                            />
-                          </div>
-                        </div>
-                      );
-                    }
-                    
-                    if (nodeType === 'MarketOrder') {
-                      return (
-                        <div className="space-y-3">
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Action</label>
-                            <select
-                              value={config.action || 'BUY'}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, action: e.target.value })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                            >
-                              <option value="BUY">BUY</option>
-                              <option value="SELL">SELL</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Symbol</label>
-                            <input
-                              type="text"
-                              value={config.symbol || 'EURUSD'}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, symbol: e.target.value })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Volume (Lot Size)</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={config.volume || 0.01}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, volume: parseFloat(e.target.value) })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Stop Loss (optional)</label>
-                            <input
-                              type="number"
-                              step="0.00001"
-                              value={config.stop_loss || ''}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, stop_loss: e.target.value ? parseFloat(e.target.value) : undefined })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                              placeholder="Optional"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Take Profit (optional)</label>
-                            <input
-                              type="number"
-                              step="0.00001"
-                              value={config.take_profit || ''}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, take_profit: e.target.value ? parseFloat(e.target.value) : undefined })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                              placeholder="Optional"
-                            />
-                          </div>
-                        </div>
-                      );
-                    }
-                    
-                    if (nodeType === 'PositionSizer') {
-                      return (
-                        <div className="space-y-3">
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Risk Percentage</label>
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={config.risk_percentage || 1.0}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, risk_percentage: parseFloat(e.target.value) })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Symbol</label>
-                            <input
-                              type="text"
-                              value={config.symbol || 'EURUSD'}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, symbol: e.target.value })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                            />
-                          </div>
-                        </div>
-                      );
-                    }
-                    
-                    if (nodeType === 'ScheduleTrigger') {
-                      return (
-                        <div className="space-y-3">
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Cron Expression</label>
-                            <input
-                              type="text"
-                              value={config.cron_expression || '0 9 * * *'}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, cron_expression: e.target.value })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm font-mono"
-                              placeholder="0 9 * * *"
-                            />
-                            <div className="text-xs text-gray-500 mt-1">
-                              Examples: "0 9 * * *" (9 AM daily), "*/15 * * * *" (every 15 min)
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Timezone</label>
-                            <input
-                              type="text"
-                              value={config.timezone || 'UTC'}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, timezone: e.target.value })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                            />
-                          </div>
-                        </div>
-                      );
-                    }
-                    
-                    if (nodeType === 'TimeTrigger') {
-                      return (
-                        <div className="space-y-3">
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Interval (minutes)</label>
-                            <input
-                              type="number"
-                              value={config.interval_minutes || 60}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, interval_minutes: parseInt(e.target.value) })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                            />
-                          </div>
-                        </div>
-                      );
-                    }
-                    
-                    if (nodeType === 'DashboardNotification') {
-                      return (
-                        <div className="space-y-3">
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Title</label>
-                            <input
-                              type="text"
-                              value={config.title || ''}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, title: e.target.value })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                              placeholder="Notification Title"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Message</label>
-                            <textarea
-                              value={config.message || ''}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, message: e.target.value })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                              rows={3}
-                              placeholder="Notification message"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Type</label>
-                            <select
-                              value={config.type || 'info'}
-                              onChange={(e) => updateNodeConfig(selectedNode.id, { ...config, type: e.target.value })}
-                              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm"
-                            >
-                              <option value="info">Info</option>
-                              <option value="success">Success</option>
-                              <option value="warning">Warning</option>
-                              <option value="error">Error</option>
-                            </select>
-                          </div>
-                        </div>
-                      );
-                    }
-                    
-                    // Default: Show JSON editor for other nodes
-                    return (
-                      <div>
-                        <label className="block text-xs font-medium mb-1">Configuration (JSON)</label>
-                        <textarea
-                          value={JSON.stringify(config, null, 2)}
-                          onChange={(e) => {
-                            try {
-                              const newConfig = JSON.parse(e.target.value);
-                              updateNodeConfig(selectedNode.id, newConfig);
-                            } catch (err) {
-                              // Invalid JSON, ignore
-                            }
-                          }}
-                          className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm font-mono"
-                          rows={8}
-                          placeholder='{"key": "value"}'
-                        />
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                <div className="border-t border-gray-700 pt-4 space-y-2">
-                  <button
-                    onClick={() => deleteNode(selectedNode.id)}
-                    className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg transition-colors"
-                  >
-                    <Trash2 size={16} />
-                    Delete Node
-                  </button>
-
-                  <button
-                    onClick={() => setSelectedNode(null)}
-                    className="w-full flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg transition-colors"
-                  >
-                    Close Panel
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
+        </aside>
+
+        <main className="flex-1 relative bg-black">
+          <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onDrop={onDrop} onDragOver={onDragOver} onNodeClick={(_, n) => setSelectedNode(n)} onPaneClick={() => setSelectedNode(null)} nodeTypes={nodeTypes} fitView>
+            <Background variant={'dots' as any} color="#1a1a1e" gap={24} size={1} />
+            <Controls className="!bg-gray-900 !border-gray-800 !rounded-xl" />
+          </ReactFlow>
+        </main>
+
+        {selectedNode && (
+          <aside className="w-80 bg-gray-900 border-l border-gray-800 flex flex-col shadow-[-10px_0_40px_rgba(0,0,0,0.5)]">
+            <div className="p-8 border-b border-gray-800 flex items-center justify-between">
+              <h3 className="font-black flex items-center gap-3 uppercase text-xs tracking-widest"><Settings size={18} className="text-blue-500" /> Options</h3>
+              <button onClick={() => setSelectedNode(null)} className="p-2 hover:bg-gray-800 rounded-xl transition-all"><Plus size={22} className="rotate-45 text-gray-500" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-8 space-y-8">
+              <div className="space-y-4">
+                <p className="text-[10px] font-black text-gray-600 tracking-[0.2em] uppercase">Control Layer</p>
+                {Object.entries(selectedNode.data.config || {}).map(([key, val]: [string, any]) => (
+                  <div key={key}>
+                    <label className="text-xs text-gray-400 font-bold mb-2 block capitalize">{key.replace('_', ' ')}</label>
+                    <input type="text" value={val} onChange={(e) => {
+                      const nc = { ...selectedNode.data.config, [key]: e.target.value };
+                      setNodes(nds => nds.map(n => n.id === selectedNode.id ? { ...n, data: { ...n.data, config: nc } } : n));
+                    }} className="w-full bg-black border border-gray-800 rounded-2xl px-5 py-3 text-sm focus:border-blue-500 outline-none transition-all shadow-inner" />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="p-8 border-t border-gray-800 bg-black/20 text-center">
+              <button onClick={() => { setNodes(nds => nds.filter(n => n.id !== selectedNode.id)); setSelectedNode(null); }} className="w-full bg-red-600/10 text-red-500 border border-red-500/20 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all active:scale-95"><Trash2 size={16} className="inline mr-2" /> Dismantle Node</button>
+            </div>
+          </aside>
         )}
       </div>
+
+      {showGuide && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl">
+          <div className="bg-[#0b0b0d] border border-gray-800 rounded-[3rem] w-full max-w-4xl flex flex-col h-[75vh] shadow-[0_0_100px_rgba(37,99,235,0.1)]">
+            <div className="p-10 border-b border-gray-800/50 flex items-center justify-between">
+              <h2 className="text-3xl font-black flex items-center gap-4"><Brain size={40} className="text-blue-500" /> Building Guide</h2>
+              <button onClick={() => setShowGuide(false)} className="p-3 hover:bg-gray-800 rounded-full transition-all group"><Plus size={40} className="rotate-45 text-gray-600 group-hover:text-white" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-12 space-y-12">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+                <div className="space-y-6">
+                  <div className="w-16 h-16 bg-purple-600/10 text-purple-400 rounded-3xl flex items-center justify-center text-3xl font-black border border-purple-500/20">01</div>
+                  <h3 className="text-xl font-black uppercase text-white">Trigger</h3>
+                  <p className="text-sm text-gray-500 leading-relaxed">Start with a **Manual Trigger** to test. Later, use **Price Triggers** to monitor live levels 24/7.</p>
+                </div>
+                <div className="space-y-6">
+                  <div className="w-16 h-16 bg-blue-600/10 text-blue-400 rounded-3xl flex items-center justify-center text-3xl font-black border border-blue-500/20">02</div>
+                  <h3 className="text-xl font-black uppercase text-white">Analysis</h3>
+                  <p className="text-sm text-gray-500 leading-relaxed">Drag and connect **Indicators** (RSI, MACD). Ensure you connect the dots to create a logical sequence.</p>
+                </div>
+                <div className="space-y-6">
+                  <div className="w-16 h-16 bg-green-600/10 text-green-400 rounded-3xl flex items-center justify-center text-3xl font-black border border-green-500/20">03</div>
+                  <h3 className="text-xl font-black uppercase text-white">Execution</h3>
+                  <p className="text-sm text-gray-500 leading-relaxed">End with a **Market Order** node. Don't forget a **Position Sizer** node for high-quality risk control.</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-10 border-t border-gray-800/50">
+              <button onClick={() => { setShowGuide(false); loadExample(); }} className="w-full py-6 bg-blue-600 hover:bg-blue-700 text-white font-black text-xl rounded-[2.5rem] shadow-2xl transition-all active:scale-95">LOAD PRO TEMPLATE & START BUILDING</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

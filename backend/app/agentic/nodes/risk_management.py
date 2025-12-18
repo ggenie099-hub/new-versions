@@ -372,3 +372,64 @@ class MaxPositionsNode(BaseNode):
     
     def get_outputs(self) -> list:
         return ['can_open_position', 'current_positions', 'limit_reached', 'status']
+
+
+class SmartRiskManagerNode(BaseNode):
+    """Advanced risk management with Kelly Criterion and equity scaling"""
+    
+    async def execute(self, input_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Calculate smart position size
+        
+        Config:
+            base_risk: Base risk percentage (default: 1%)
+            max_risk: Maximum allowed risk (default: 3%)
+            aggressiveness: 0 to 1 (0 = Conservative, 1 = Aggressive)
+        
+        Input:
+            win_rate: Historical win rate (0-1)
+            avg_win_loss: Average win/loss ratio (e.g., 1.5)
+            account_balance: Current balance
+            
+        Output:
+            adjusted_risk: New risk percentage
+            suggested_lot: Recommended lot size
+            risk_multiplier: Multiplier applied to base risk
+        """
+        base_risk = self.config.get('base_risk', 1.0)
+        max_risk = self.config.get('max_risk', 3.0)
+        aggressiveness = self.config.get('aggressiveness', 0.5)
+        
+        if not input_data:
+            raise Exception("Smart Risk Manager requires input data")
+            
+        win_rate = input_data.get('win_rate', 0.5)
+        avg_win_loss = input_data.get('avg_win_loss', 1.0)
+        balance = input_data.get('account_balance')
+        
+        if not balance:
+            account_info = await mt5_handler.get_account_info()
+            balance = account_info['balance']
+            
+        # Kelly Criterion: K% = W - [(1 - W) / R]
+        # Where W is win rate, R is win/loss ratio
+        if avg_win_loss > 0:
+            kelly_f = win_rate - ((1 - win_rate) / avg_win_loss)
+        else:
+            kelly_f = 0
+            
+        # Apply fractional Kelly (much safer)
+        adjusted_risk = base_risk + (kelly_f * aggressiveness * 10)
+        
+        # Clamp between 0.1% and max_risk
+        adjusted_risk = max(0.1, min(max_risk, adjusted_risk))
+        
+        return {
+            'adjusted_risk': round(adjusted_risk, 2),
+            'kelly_fraction': round(kelly_f, 4),
+            'risk_multiplier': round(adjusted_risk / base_risk, 2) if base_risk > 0 else 1,
+            'balance': balance
+        }
+
+    def get_outputs(self) -> list:
+        return ['adjusted_risk', 'kelly_fraction', 'risk_multiplier']

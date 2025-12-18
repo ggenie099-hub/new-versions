@@ -12,8 +12,11 @@ from .risk_management import (
     RiskRewardCalculatorNode,
     DrawdownMonitorNode,
     DailyLossLimitNode,
-    MaxPositionsNode
+    MaxPositionsNode,
+    SmartRiskManagerNode
 )
+from .memory import SetStateNode, GetStateNode
+from .news import NewsFetchNode, SentimentAnalysisNode
 from .triggers import (
     ScheduleTriggerNode,
     PriceTriggerNode,
@@ -49,6 +52,13 @@ __all__ = [
     "DrawdownMonitorNode",
     "DailyLossLimitNode",
     "MaxPositionsNode",
+    "SmartRiskManagerNode",
+    # Memory
+    "SetStateNode",
+    "GetStateNode",
+    # News
+    "NewsFetchNode",
+    "SentimentAnalysisNode",
     # Triggers
     "ScheduleTriggerNode",
     "PriceTriggerNode",

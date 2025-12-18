@@ -49,6 +49,40 @@ async def get_unread_count(
     return {"unread_count": count}
 
 
+@router.post("/read-all")
+async def mark_all_as_read(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Mark all notifications as read"""
+    
+    await db.execute(
+        update(Notification)
+        .where(Notification.user_id == current_user.id)
+        .where(Notification.is_read == False)
+        .values(is_read=True)
+    )
+    await db.commit()
+    
+    return {"message": "All notifications marked as read"}
+
+
+@router.delete("/clear-all", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_all_notifications(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete all notifications"""
+    from sqlalchemy import delete
+    
+    await db.execute(
+        delete(Notification).where(Notification.user_id == current_user.id)
+    )
+    await db.commit()
+    
+    return None
+
+
 @router.post("/{notification_id}/read")
 async def mark_as_read(
     notification_id: int,
@@ -77,24 +111,6 @@ async def mark_as_read(
     return {"message": "Notification marked as read"}
 
 
-@router.post("/read-all")
-async def mark_all_as_read(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Mark all notifications as read"""
-    
-    await db.execute(
-        update(Notification)
-        .where(Notification.user_id == current_user.id)
-        .where(Notification.is_read == False)
-        .values(is_read=True)
-    )
-    await db.commit()
-    
-    return {"message": "All notifications marked as read"}
-
-
 @router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_notification(
     notification_id: int,
@@ -118,26 +134,6 @@ async def delete_notification(
         )
     
     await db.delete(notification)
-    await db.commit()
-    
-    return None
-
-
-@router.delete("/clear-all", status_code=status.HTTP_204_NO_CONTENT)
-async def clear_all_notifications(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Delete all notifications"""
-    
-    result = await db.execute(
-        select(Notification).filter(Notification.user_id == current_user.id)
-    )
-    notifications = result.scalars().all()
-    
-    for notification in notifications:
-        await db.delete(notification)
-    
     await db.commit()
     
     return None

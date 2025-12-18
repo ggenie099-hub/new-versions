@@ -37,11 +37,23 @@ async def create_trade(
             detail="MT5 account not found"
         )
     
-    if not account.is_connected:
+    # Ensure active connection
+    from app.dependencies import ensure_mt5_connected
+    connected = await ensure_mt5_connected(account, mt5_handler, encryption_handler)
+    if not connected:
+        if account.is_connected:
+            account.is_connected = False
+            await db.commit()
+            
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="MT5 account is not connected"
+            detail="Failed to establish MT5 connection. Please check your MT5 terminal and credentials."
         )
+    
+    # Update status if it was False but we just connected successfully
+    if not account.is_connected:
+        account.is_connected = True
+        await db.commit()
     
     # Place order
     success, order_result, error = await mt5_handler.place_order(
@@ -258,11 +270,23 @@ async def sync_positions(
             detail="MT5 account not found"
         )
     
-    if not account.is_connected:
+    # Ensure active connection
+    from app.dependencies import ensure_mt5_connected
+    connected = await ensure_mt5_connected(account, mt5_handler, encryption_handler)
+    if not connected:
+        if account.is_connected:
+            account.is_connected = False
+            await db.commit()
+            
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="MT5 account is not connected. Please connect first."
+            detail="Failed to establish MT5 connection. Please check your MT5 terminal and credentials."
         )
+    
+    # Update status if it was False but we just connected successfully
+    if not account.is_connected:
+        account.is_connected = True
+        await db.commit()
     
     # Check if encrypted password exists
     if not account.encrypted_password:
@@ -272,13 +296,11 @@ async def sync_positions(
         )
     
     # Decrypt password
-    try:
-        password = encryption_handler.decrypt(account.encrypted_password)
-    except Exception as e:
-        print(f"❌ Password decryption failed for account {account_id}: {str(e)}")
+    password = encryption_handler.decrypt(account.encrypted_password)
+    if not password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to decrypt MT5 password. Please reconnect your account."
+            detail="Failed to decrypt your MT5 password. This account may have been added with an older encryption key. Please delete and re-add the account."
         )
     
     # Initialize MT5

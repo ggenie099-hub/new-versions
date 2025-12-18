@@ -41,6 +41,49 @@ async def execute_workflow(
     
     # Execute workflow
     try:
+        # If live execution, ensure MT5 is connected
+        if not execution_data.test_mode:
+            from app.models import MT5Account
+            from app.mt5_handler import mt5_handler
+            from app.security import encryption_handler
+            from app.dependencies import ensure_mt5_connected
+            
+            # Get user's active/connected MT5 accounts
+            acc_result = await db.execute(
+                select(MT5Account).filter(
+                    MT5Account.user_id == current_user.id,
+                    MT5Account.is_connected == True
+                )
+            )
+            accounts = acc_result.scalars().all()
+            
+            if not accounts:
+                # If no "connected" accounts, check for any account
+                acc_result = await db.execute(
+                    select(MT5Account).filter(MT5Account.user_id == current_user.id)
+                )
+                accounts = acc_result.scalars().all()
+                
+            if not accounts:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No MT5 account found. Please add and connect an MT5 account first."
+                )
+                
+            # Try to connect to the first available account
+            connected = False
+            error_msg = ""
+            for account in accounts:
+                if await ensure_mt5_connected(account, mt5_handler, encryption_handler):
+                    connected = True
+                    break
+                    
+            if not connected:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to establish MT5 connection. Please ensure your MT5 terminal is running and credentials are correct."
+                )
+
         executor = WorkflowExecutor(workflow, current_user.id)
         execution = await executor.execute(test_mode=execution_data.test_mode)
         
@@ -50,6 +93,8 @@ async def execute_workflow(
             'message': 'Workflow execution started'
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

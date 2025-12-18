@@ -22,6 +22,7 @@ from app.agentic.nodes import (
     DrawdownMonitorNode,
     DailyLossLimitNode,
     MaxPositionsNode,
+    SmartRiskManagerNode,
     ScheduleTriggerNode,
     PriceTriggerNode,
     IndicatorTriggerNode,
@@ -29,8 +30,9 @@ from app.agentic.nodes import (
     WebhookTriggerNode,
     ManualTriggerNode
 )
+from app.agentic.nodes.memory import SetStateNode, GetStateNode
+from app.agentic.nodes.news import NewsFetchNode, SentimentAnalysisNode
 from app.database import AsyncSessionLocal
-
 
 # Node registry
 NODE_REGISTRY = {
@@ -49,6 +51,14 @@ NODE_REGISTRY = {
     # Notification Nodes
     'DashboardNotification': DashboardNotificationNode,
     
+    # State Nodes
+    'SetState': SetStateNode,
+    'GetState': GetStateNode,
+    
+    # News & Sentiment Nodes
+    'NewsFetch': NewsFetchNode,
+    'SentimentAnalysis': SentimentAnalysisNode,
+    
     # Technical Indicator Nodes
     'RSI': RSINode,
     'MACD': MACDNode,
@@ -62,6 +72,7 @@ NODE_REGISTRY = {
     'DrawdownMonitor': DrawdownMonitorNode,
     'DailyLossLimit': DailyLossLimitNode,
     'MaxPositions': MaxPositionsNode,
+    'SmartRiskManager': SmartRiskManagerNode,
     
     # Trigger Nodes
     'ScheduleTrigger': ScheduleTriggerNode,
@@ -165,7 +176,14 @@ class WorkflowExecutor:
             raise Exception(f"Unknown node type: {node_type}")
         
         # Create node instance
-        node = node_class(node_id=node_id, config=node_data)
+        context = {
+            'workflow_id': self.workflow.id,
+            'user_id': self.user_id,
+            'execution_id': self.execution_id,
+            'test_mode': test_mode
+        }
+        print(f"DEBUG: Executing node {node_id} ({node_type}) for user {self.user_id}. test_mode={test_mode}")
+        node = node_class(node_id=node_id, config=node_data, context=context)
         
         # Get input data from previous nodes
         input_data = self._get_node_inputs(node_id)

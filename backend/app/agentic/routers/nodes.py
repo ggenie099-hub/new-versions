@@ -259,6 +259,72 @@ async def get_node_types() -> Dict[str, Any]:
                         "max_per_symbol": {"type": "number", "default": 2, "required": False},
                         "symbol": {"type": "string", "required": False}
                     }
+                },
+                {
+                    "type": "SmartRiskManager",
+                    "name": "Smart Risk Manager",
+                    "description": "Adjust risk based on performance (Kelly Criterion)",
+                    "inputs": ["win_rate", "avg_win_loss", "account_balance"],
+                    "outputs": ["adjusted_risk", "kelly_fraction", "risk_multiplier"],
+                    "config": {
+                        "base_risk": {"type": "number", "default": 1.0, "required": False},
+                        "max_risk": {"type": "number", "default": 3.0, "required": False},
+                        "aggressiveness": {"type": "number", "default": 0.5, "required": False}
+                    }
+                }
+            ]
+        },
+        "news": {
+            "name": "News & Sentiment",
+            "description": "Market news and AI sentiment analysis",
+            "nodes": [
+                {
+                    "type": "NewsFetch",
+                    "name": "Fetch News",
+                    "description": "Fetch recent market news headlines",
+                    "inputs": [],
+                    "outputs": ["headlines", "count"],
+                    "config": {
+                        "symbol": {"type": "string", "default": "EURUSD", "required": False},
+                        "limit": {"type": "number", "default": 5, "required": False},
+                        "api_key": {"type": "string", "required": False}
+                    }
+                },
+                {
+                    "type": "SentimentAnalysis",
+                    "name": "Sentiment Analysis",
+                    "description": "Analyze news sentiment using AI",
+                    "inputs": ["headlines"],
+                    "outputs": ["sentiment_score", "sentiment_label", "analysis"],
+                    "config": {}
+                }
+            ]
+        },
+        "memory": {
+            "name": "Persistence & Memory",
+            "description": "Store and retrieve data across executions",
+            "nodes": [
+                {
+                    "type": "SetState",
+                    "name": "Store Memory",
+                    "description": "Save a value to workflow memory",
+                    "inputs": ["value"],
+                    "outputs": ["success", "key", "value"],
+                    "config": {
+                        "key": {"type": "string", "required": True},
+                        "value": {"type": "string", "required": False}
+                    }
+                },
+                {
+                    "type": "GetState",
+                    "name": "Recall Memory",
+                    "description": "Retrieve a value from workflow memory",
+                    "inputs": [],
+                    "outputs": ["value", "exists"],
+                    "config": {
+                        "key": {"type": "string", "required": True},
+                        "default_value": {"type": "string", "required": False}
+                    }
                 }
             ]
         },

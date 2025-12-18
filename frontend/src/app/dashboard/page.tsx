@@ -223,11 +223,45 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center space-x-4">
+            {/* Account Switcher */}
+            {mt5Accounts.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400">Account:</span>
+                <select
+                  value={activeAccount?.id || ''}
+                  onChange={async (e) => {
+                    const accountId = parseInt(e.target.value);
+                    const account = mt5Accounts.find((a) => a.id === accountId);
+                    if (account) {
+                      setSyncing(true);
+                      try {
+                        await mt5API.connectAccount(accountId);
+                        setActiveAccount(account);
+                        toast.success(`Switched to account ${account.account_number}`);
+                        await loadDashboardData();
+                      } catch (error: any) {
+                        toast.error(error.response?.data?.detail || 'Failed to switch account');
+                      } finally {
+                        setSyncing(false);
+                      }
+                    }
+                  }}
+                  className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-semibold"
+                >
+                  {mt5Accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.account_number} ({acc.is_connected ? 'Connected' : 'Disconnected'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Symbol Selector */}
             <select
               value={selectedSymbol}
               onChange={(e) => setSelectedSymbol(e.target.value)}
-              className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm"
+              className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm"
             >
               <option value="EURUSD">EURUSD</option>
               <option value="GBPUSD">GBPUSD</option>

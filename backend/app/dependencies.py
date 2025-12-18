@@ -83,3 +83,27 @@ async def verify_websocket_connection(websocket: WebSocket, api_key: str, db: As
         await websocket.close(code=4001, reason="Invalid API key")
         raise HTTPException(status_code=401, detail="Invalid API key")
     return user
+
+
+async def ensure_mt5_connected(account, mt5_handler, encryption_handler) -> bool:
+    """Ensure MT5 is connected for the given account"""
+    if not account or not account.encrypted_password:
+        return False
+    
+    try:
+        # Check if already connected (handled by mt5_handler.login which checks current account)
+        password = encryption_handler.decrypt(account.encrypted_password)
+        if not password:
+            print(f"❌ Decryption failed for account {account.account_number}. Key mismatch suspected.")
+            return False
+            
+        await mt5_handler.initialize()
+        success, _ = await mt5_handler.login(
+            int(account.account_number), 
+            password, 
+            account.server
+        )
+        return success
+    except Exception as e:
+        print(f"❌ ensure_mt5_connected failed: {e}")
+        return False

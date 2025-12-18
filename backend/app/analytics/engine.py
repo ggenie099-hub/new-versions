@@ -38,10 +38,17 @@ class AnalyticsEngine:
     # ============ MARKET DATA HELPERS ============
     
     def _get_ohlcv_data(self, symbol: str, timeframe: int = mt5.TIMEFRAME_H1, bars: int = 100) -> Optional[np.ndarray]:
-        """Get OHLCV data from MT5"""
+        """Get OHLCV data from MT5 with symbol visibility check"""
         try:
+            # Ensure symbol is visible in Market Watch
+            if not mt5.symbol_select(symbol, True):
+                logger.error(f"Failed to select symbol {symbol}")
+                # Try to search for it, maybe it needs a prefix/suffix
+                pass
+            
             rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, bars)
             if rates is None or len(rates) == 0:
+                logger.warning(f"No rates returned for {symbol}")
                 return None
             return rates
         except Exception as e:

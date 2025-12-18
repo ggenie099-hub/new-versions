@@ -127,3 +127,17 @@ class ExecutionMetrics(Base):
     
     # Relationships
     execution = relationship("WorkflowExecution")
+
+
+class WorkflowState(Base):
+    """Persistent state for workflows across executions"""
+    __tablename__ = "workflow_states"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_id = Column(Integer, ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False, index=True)
+    key = Column(String(255), nullable=False, index=True)
+    value = Column(JSON, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    workflow = relationship("Workflow", backref="states")

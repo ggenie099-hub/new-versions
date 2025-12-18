@@ -37,6 +37,23 @@ async def create_mt5_account(
     # Encrypt password
     encrypted_password = encryption_handler.encrypt(account_data.password)
     
+    # Verify credentials before saving
+    await mt5_handler.initialize()
+    success, error = await mt5_handler.login(
+        int(account_data.account_number),
+        account_data.password,
+        account_data.server
+    )
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to verify MT5 credentials: {error}"
+        )
+    
+    # Get initial account info
+    acc_info = await mt5_handler.get_account_info()
+    
     # Create account
     new_account = MT5Account(
         user_id=current_user.id,
@@ -45,6 +62,13 @@ async def create_mt5_account(
         server=account_data.server,
         account_type=account_data.account_type,
         broker=account_data.broker,
+        is_connected=True,
+        balance=acc_info["balance"] if acc_info else 0.0,
+        equity=acc_info["equity"] if acc_info else 0.0,
+        profit=acc_info["profit"] if acc_info else 0.0,
+        leverage=acc_info["leverage"] if acc_info else 100,
+        currency=acc_info["currency"] if acc_info else "USD",
+        last_sync=datetime.utcnow()
     )
     
     db.add(new_account)
@@ -65,6 +89,46 @@ async def get_mt5_accounts(
         select(MT5Account).filter(MT5Account.user_id == current_user.id)
     )
     accounts = result.scalars().all()
+    
+    # Auto-reconnect accounts that should be connected
+    updated = False
+    for account in accounts:
+        if account.is_connected:
+            # Check if mt5_handler is actually logged in to this account
+            active_info = await mt5_handler.get_account_info()
+            if not active_info or int(active_info['login']) != int(account.account_number):
+                print(f"🔄 Auto-reconnecting MT5 account {account.account_number}...")
+                try:
+                    password = encryption_handler.decrypt(account.encrypted_password)
+                    if not password:
+                        print(f"❌ Decryption failed for {account.account_number}. Account may need to be re-added.")
+                        continue
+                        
+                    await mt5_handler.initialize()
+                    success, error = await mt5_handler.login(
+                        int(account.account_number),
+                        password,
+                        account.server
+                    )
+                    if success:
+                        print(f"✅ Successfully auto-reconnected {account.account_number}")
+                        # Update balance/equity while at it
+                        acc_info = await mt5_handler.get_account_info()
+                        if acc_info:
+                            account.balance = acc_info["balance"]
+                            account.equity = acc_info["equity"]
+                            account.profit = acc_info["profit"]
+                            account.last_sync = datetime.utcnow()
+                            updated = True
+                    else:
+                        print(f"❌ Auto-reconnect failed for {account.account_number}: {error}")
+                        # Don't set is_connected to False here yet, maybe it's a transient error
+                except Exception as e:
+                    print(f"❌ Error during auto-reconnect for {account.account_number}: {str(e)}")
+    
+    if updated:
+        await db.commit()
+        
     return accounts
 
 
@@ -118,6 +182,11 @@ async def connect_mt5_account(
     
     # Decrypt password
     password = encryption_handler.decrypt(account.encrypted_password)
+    if not password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to decrypt your MT5 password. This account may have been added with an older encryption key. Please delete and re-add the account."
+        )
     
     # Initialize and login
     await mt5_handler.initialize()
@@ -209,11 +278,24 @@ async def sync_mt5_account(
             detail="MT5 account not found"
         )
     
-    if not account.is_connected:
+    # Ensure active connection
+    from app.dependencies import ensure_mt5_connected
+    connected = await ensure_mt5_connected(account, mt5_handler, encryption_handler)
+    if not connected:
+        # If we failed to ensure connection, update the DB status
+        if account.is_connected:
+            account.is_connected = False
+            await db.commit()
+            
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="MT5 account is not connected"
+            detail="Failed to establish MT5 connection. Please check your MT5 terminal and credentials."
         )
+    
+    # Update status if it was False but we just connected successfully
+    if not account.is_connected:
+        account.is_connected = True
+        await db.commit()
     
     # Get account info
     account_info = await mt5_handler.get_account_info()

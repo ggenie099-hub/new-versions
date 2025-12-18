@@ -9,9 +9,10 @@ import time
 class BaseNode(ABC):
     """Base class for all workflow nodes"""
     
-    def __init__(self, node_id: str, config: Dict[str, Any]):
+    def __init__(self, node_id: str, config: Dict[str, Any], context: Optional[Dict[str, Any]] = None):
         self.node_id = node_id
         self.config = config
+        self.context = context or {}
         self.node_type = self.__class__.__name__
     
     @abstractmethod
