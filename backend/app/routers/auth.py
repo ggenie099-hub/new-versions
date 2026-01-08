@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
 from app.models import User
-from app.schemas import UserCreate, UserLogin, UserResponse, TokenResponse
+from app.schemas import UserCreate, UserLogin, UserResponse, TokenResponse, TokenRefresh
 from app.security import (
     verify_password,
     get_password_hash,
@@ -100,11 +100,11 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
+async def refresh_token(data: TokenRefresh, db: AsyncSession = Depends(get_db)):
     """Refresh access token"""
     from app.security import decode_token
     
-    payload = decode_token(refresh_token)
+    payload = decode_token(data.refresh_token)
     if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

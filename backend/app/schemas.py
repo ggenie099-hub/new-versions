@@ -39,6 +39,10 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class TokenRefresh(BaseModel):
+    refresh_token: str
+
+
 # MT5 Account Schemas
 class MT5AccountCreate(BaseModel):
     account_number: str
