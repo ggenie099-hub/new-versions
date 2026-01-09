@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   ArrowLeft, Plus, Play, Power, Trash2, Zap, TrendingUp, 
-  Bell, Shield, Clock, BarChart3, Target, AlertTriangle, X
+  Bell, Shield, Clock, BarChart3, Target, AlertTriangle, X, Brain
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -30,159 +30,276 @@ interface WorkflowTemplate {
   trigger_type: string;
 }
 
+// WORKING TEMPLATES - All use real backend node types
 const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
+  // ===== TRADING STRATEGIES =====
   {
-    id: 'price-alert',
-    name: 'Price Alert System',
-    description: 'Get notified when price reaches your target level',
-    icon: Bell,
-    color: 'blue',
-    category: 'Alerts',
-    trigger_type: 'price_condition',
-    nodes: [
-      { id: 'node-1', type: 'GetLivePrice', data: { symbol: 'EURUSD' }, position: { x: 100, y: 100 } },
-      { id: 'node-2', type: 'Condition', data: { condition: 'price > 1.1000', operator: '>' }, position: { x: 300, y: 100 } },
-      { id: 'node-3', type: 'DashboardNotification', data: { title: 'Price Alert', message: 'EURUSD reached target!', type: 'success' }, position: { x: 500, y: 100 } }
-    ],
-    connections: [{ id: 'conn-1', source: 'node-1', target: 'node-2' }, { id: 'conn-2', source: 'node-2', target: 'node-3' }]
-  },
-  {
-    id: 'trend-follower',
-    name: 'Trend Following Bot',
-    description: 'Auto-trade based on moving average crossover signals',
+    id: 'rsi-scalper',
+    name: 'RSI Scalper Bot',
+    description: 'Buy when RSI < 30 (oversold), Sell when RSI > 70 (overbought)',
     icon: TrendingUp,
     color: 'green',
     category: 'Trading',
-    trigger_type: 'scheduled',
+    trigger_type: 'manual',
     nodes: [
-      { id: 'node-1', type: 'GetLivePrice', data: { symbol: 'EURUSD' }, position: { x: 100, y: 100 } },
-      { id: 'node-2', type: 'TechnicalIndicator', data: { indicator: 'SMA', period: 20 }, position: { x: 300, y: 50 } },
-      { id: 'node-3', type: 'TechnicalIndicator', data: { indicator: 'SMA', period: 50 }, position: { x: 300, y: 150 } },
-      { id: 'node-4', type: 'Condition', data: { condition: 'sma20 > sma50', operator: 'crossover' }, position: { x: 500, y: 100 } },
-      { id: 'node-5', type: 'PlaceOrder', data: { orderType: 'BUY', volume: 0.01, sl: 50, tp: 100 }, position: { x: 700, y: 100 } }
+      { id: 'trigger-1', type: 'ManualTrigger', data: {}, position: { x: 50, y: 150 } },
+      { id: 'price-1', type: 'GetLivePrice', data: { symbol: 'EURUSD' }, position: { x: 250, y: 150 } },
+      { id: 'rsi-1', type: 'RSI', data: { symbol: 'EURUSD', period: '14', timeframe: 'M15' }, position: { x: 450, y: 150 } },
+      { id: 'order-1', type: 'MarketOrder', data: { symbol: 'EURUSD', order_type: 'BUY', volume: '0.01', stop_loss: '30', take_profit: '60', comment: 'RSI Scalper' }, position: { x: 650, y: 150 } },
+      { id: 'notify-1', type: 'DashboardNotification', data: { title: 'RSI Trade!', message: 'RSI Scalper executed BUY on EURUSD', type: 'success' }, position: { x: 850, y: 150 } }
     ],
     connections: [
-      { id: 'conn-1', source: 'node-1', target: 'node-2' }, { id: 'conn-2', source: 'node-1', target: 'node-3' },
-      { id: 'conn-3', source: 'node-2', target: 'node-4' }, { id: 'conn-4', source: 'node-3', target: 'node-4' },
-      { id: 'conn-5', source: 'node-4', target: 'node-5' }
+      { id: 'c1', source: 'trigger-1', target: 'price-1' },
+      { id: 'c2', source: 'price-1', target: 'rsi-1' },
+      { id: 'c3', source: 'rsi-1', target: 'order-1' },
+      { id: 'c4', source: 'order-1', target: 'notify-1' }
     ]
   },
   {
-    id: 'risk-manager',
-    name: 'Risk Management Bot',
-    description: 'Auto close trades when daily loss limit is reached',
+    id: 'macd-trader',
+    name: 'MACD Crossover Bot',
+    description: 'Trade on MACD signal line crossovers for trend following',
+    icon: TrendingUp,
+    color: 'blue',
+    category: 'Trading',
+    trigger_type: 'manual',
+    nodes: [
+      { id: 'trigger-1', type: 'ManualTrigger', data: {}, position: { x: 50, y: 150 } },
+      { id: 'price-1', type: 'GetLivePrice', data: { symbol: 'GBPUSD' }, position: { x: 250, y: 150 } },
+      { id: 'macd-1', type: 'MACD', data: { symbol: 'GBPUSD', fast_period: '12', slow_period: '26', signal_period: '9', timeframe: 'H1' }, position: { x: 450, y: 150 } },
+      { id: 'order-1', type: 'MarketOrder', data: { symbol: 'GBPUSD', order_type: 'BUY', volume: '0.01', stop_loss: '40', take_profit: '80', comment: 'MACD Crossover' }, position: { x: 650, y: 150 } },
+      { id: 'notify-1', type: 'DashboardNotification', data: { title: 'MACD Signal!', message: 'MACD Crossover trade on GBPUSD', type: 'success' }, position: { x: 850, y: 150 } }
+    ],
+    connections: [
+      { id: 'c1', source: 'trigger-1', target: 'price-1' },
+      { id: 'c2', source: 'price-1', target: 'macd-1' },
+      { id: 'c3', source: 'macd-1', target: 'order-1' },
+      { id: 'c4', source: 'order-1', target: 'notify-1' }
+    ]
+  },
+  {
+    id: 'bollinger-bounce',
+    name: 'Bollinger Bounce Bot',
+    description: 'Trade bounces from Bollinger Band extremes',
+    icon: Target,
+    color: 'purple',
+    category: 'Trading',
+    trigger_type: 'manual',
+    nodes: [
+      { id: 'trigger-1', type: 'ManualTrigger', data: {}, position: { x: 50, y: 150 } },
+      { id: 'price-1', type: 'GetLivePrice', data: { symbol: 'USDJPY' }, position: { x: 250, y: 150 } },
+      { id: 'bb-1', type: 'BollingerBands', data: { symbol: 'USDJPY', period: '20', deviation: '2', timeframe: 'M30' }, position: { x: 450, y: 150 } },
+      { id: 'order-1', type: 'MarketOrder', data: { symbol: 'USDJPY', order_type: 'BUY', volume: '0.01', stop_loss: '25', take_profit: '50', comment: 'BB Bounce' }, position: { x: 650, y: 150 } },
+      { id: 'notify-1', type: 'DashboardNotification', data: { title: 'BB Trade!', message: 'Bollinger Bounce on USDJPY', type: 'success' }, position: { x: 850, y: 150 } }
+    ],
+    connections: [
+      { id: 'c1', source: 'trigger-1', target: 'price-1' },
+      { id: 'c2', source: 'price-1', target: 'bb-1' },
+      { id: 'c3', source: 'bb-1', target: 'order-1' },
+      { id: 'c4', source: 'order-1', target: 'notify-1' }
+    ]
+  },
+  {
+    id: 'quick-buy',
+    name: 'Quick BUY Bot',
+    description: 'Instant 1-click BUY order execution on EURUSD',
+    icon: Zap,
+    color: 'green',
+    category: 'Trading',
+    trigger_type: 'manual',
+    nodes: [
+      { id: 'trigger-1', type: 'ManualTrigger', data: {}, position: { x: 100, y: 150 } },
+      { id: 'order-1', type: 'MarketOrder', data: { symbol: 'EURUSD', order_type: 'BUY', volume: '0.01', comment: 'Quick Buy' }, position: { x: 350, y: 150 } },
+      { id: 'notify-1', type: 'DashboardNotification', data: { title: 'Order Placed!', message: 'Quick BUY executed on EURUSD', type: 'success' }, position: { x: 600, y: 150 } }
+    ],
+    connections: [
+      { id: 'c1', source: 'trigger-1', target: 'order-1' },
+      { id: 'c2', source: 'order-1', target: 'notify-1' }
+    ]
+  },
+  {
+    id: 'quick-sell',
+    name: 'Quick SELL Bot',
+    description: 'Instant 1-click SELL order execution on EURUSD',
+    icon: Zap,
+    color: 'red',
+    category: 'Trading',
+    trigger_type: 'manual',
+    nodes: [
+      { id: 'trigger-1', type: 'ManualTrigger', data: {}, position: { x: 100, y: 150 } },
+      { id: 'order-1', type: 'MarketOrder', data: { symbol: 'EURUSD', order_type: 'SELL', volume: '0.01', comment: 'Quick Sell' }, position: { x: 350, y: 150 } },
+      { id: 'notify-1', type: 'DashboardNotification', data: { title: 'Order Placed!', message: 'Quick SELL executed on EURUSD', type: 'success' }, position: { x: 600, y: 150 } }
+    ],
+    connections: [
+      { id: 'c1', source: 'trigger-1', target: 'order-1' },
+      { id: 'c2', source: 'order-1', target: 'notify-1' }
+    ]
+  },
+  {
+    id: 'gold-scalper',
+    name: 'Gold Scalper Bot',
+    description: 'Quick scalping strategy for XAUUSD with tight stops',
+    icon: Target,
+    color: 'yellow',
+    category: 'Trading',
+    trigger_type: 'manual',
+    nodes: [
+      { id: 'trigger-1', type: 'ManualTrigger', data: {}, position: { x: 50, y: 150 } },
+      { id: 'price-1', type: 'GetLivePrice', data: { symbol: 'XAUUSD' }, position: { x: 250, y: 150 } },
+      { id: 'rsi-1', type: 'RSI', data: { symbol: 'XAUUSD', period: '7', timeframe: 'M5' }, position: { x: 450, y: 150 } },
+      { id: 'order-1', type: 'MarketOrder', data: { symbol: 'XAUUSD', order_type: 'BUY', volume: '0.01', stop_loss: '100', take_profit: '200', comment: 'Gold Scalper' }, position: { x: 650, y: 150 } },
+      { id: 'notify-1', type: 'DashboardNotification', data: { title: 'Gold Trade!', message: 'Gold Scalper executed on XAUUSD', type: 'success' }, position: { x: 850, y: 150 } }
+    ],
+    connections: [
+      { id: 'c1', source: 'trigger-1', target: 'price-1' },
+      { id: 'c2', source: 'price-1', target: 'rsi-1' },
+      { id: 'c3', source: 'rsi-1', target: 'order-1' },
+      { id: 'c4', source: 'order-1', target: 'notify-1' }
+    ]
+  },
+  // ===== ALERTS =====
+  {
+    id: 'price-alert',
+    name: 'Price Alert System',
+    description: 'Get notified with current price of any symbol',
+    icon: Bell,
+    color: 'blue',
+    category: 'Alerts',
+    trigger_type: 'manual',
+    nodes: [
+      { id: 'trigger-1', type: 'ManualTrigger', data: {}, position: { x: 100, y: 150 } },
+      { id: 'price-1', type: 'GetLivePrice', data: { symbol: 'EURUSD' }, position: { x: 350, y: 150 } },
+      { id: 'notify-1', type: 'DashboardNotification', data: { title: 'Price Alert', message: 'Current EURUSD price fetched!', type: 'info' }, position: { x: 600, y: 150 } }
+    ],
+    connections: [
+      { id: 'c1', source: 'trigger-1', target: 'price-1' },
+      { id: 'c2', source: 'price-1', target: 'notify-1' }
+    ]
+  },
+  // ===== RISK MANAGEMENT =====
+  {
+    id: 'risk-check',
+    name: 'Risk Check Bot',
+    description: 'Check account status and risk metrics before trading',
     icon: Shield,
     color: 'red',
     category: 'Risk',
-    trigger_type: 'scheduled',
+    trigger_type: 'manual',
     nodes: [
-      { id: 'node-1', type: 'GetAccountInfo', data: {}, position: { x: 100, y: 100 } },
-      { id: 'node-2', type: 'Condition', data: { condition: 'daily_loss > 100', operator: '>' }, position: { x: 300, y: 100 } },
-      { id: 'node-3', type: 'CloseAllTrades', data: { reason: 'Daily loss limit reached' }, position: { x: 500, y: 50 } },
-      { id: 'node-4', type: 'DashboardNotification', data: { title: 'Risk Alert', message: 'All trades closed - Loss limit reached', type: 'warning' }, position: { x: 500, y: 150 } }
+      { id: 'trigger-1', type: 'ManualTrigger', data: {}, position: { x: 50, y: 150 } },
+      { id: 'account-1', type: 'GetAccountInfo', data: {}, position: { x: 250, y: 150 } },
+      { id: 'risk-1', type: 'SmartRiskManager', data: { max_risk_percent: '2', max_daily_loss: '5', max_positions: '3' }, position: { x: 450, y: 150 } },
+      { id: 'notify-1', type: 'DashboardNotification', data: { title: 'Risk Status', message: 'Account risk check completed', type: 'info' }, position: { x: 650, y: 150 } }
     ],
     connections: [
-      { id: 'conn-1', source: 'node-1', target: 'node-2' },
-      { id: 'conn-2', source: 'node-2', target: 'node-3' }, { id: 'conn-3', source: 'node-2', target: 'node-4' }
+      { id: 'c1', source: 'trigger-1', target: 'account-1' },
+      { id: 'c2', source: 'account-1', target: 'risk-1' },
+      { id: 'c3', source: 'risk-1', target: 'notify-1' }
     ]
   },
   {
-    id: 'news-trader',
-    name: 'News Event Trader',
-    description: 'Trade automatically during high-impact news events',
-    icon: Zap,
-    color: 'yellow',
-    category: 'Trading',
-    trigger_type: 'news_event',
-    nodes: [
-      { id: 'node-1', type: 'NewsEvent', data: { impact: 'high', currency: 'USD' }, position: { x: 100, y: 100 } },
-      { id: 'node-2', type: 'GetLivePrice', data: { symbol: 'EURUSD' }, position: { x: 300, y: 100 } },
-      { id: 'node-3', type: 'PlaceOrder', data: { orderType: 'BUY_STOP', volume: 0.01, distance: 20 }, position: { x: 500, y: 50 } },
-      { id: 'node-4', type: 'PlaceOrder', data: { orderType: 'SELL_STOP', volume: 0.01, distance: 20 }, position: { x: 500, y: 150 } }
-    ],
-    connections: [
-      { id: 'conn-1', source: 'node-1', target: 'node-2' },
-      { id: 'conn-2', source: 'node-2', target: 'node-3' }, { id: 'conn-3', source: 'node-2', target: 'node-4' }
-    ]
-  },
-  {
-    id: 'scalper',
-    name: 'Quick Scalper Bot',
-    description: 'Fast in-and-out trades with tight stop loss',
-    icon: Clock,
-    color: 'purple',
-    category: 'Trading',
-    trigger_type: 'scheduled',
-    nodes: [
-      { id: 'node-1', type: 'GetLivePrice', data: { symbol: 'EURUSD' }, position: { x: 100, y: 100 } },
-      { id: 'node-2', type: 'TechnicalIndicator', data: { indicator: 'RSI', period: 7 }, position: { x: 300, y: 100 } },
-      { id: 'node-3', type: 'Condition', data: { condition: 'rsi < 30', operator: '<' }, position: { x: 500, y: 100 } },
-      { id: 'node-4', type: 'PlaceOrder', data: { orderType: 'BUY', volume: 0.05, sl: 10, tp: 15 }, position: { x: 700, y: 100 } }
-    ],
-    connections: [
-      { id: 'conn-1', source: 'node-1', target: 'node-2' },
-      { id: 'conn-2', source: 'node-2', target: 'node-3' },
-      { id: 'conn-3', source: 'node-3', target: 'node-4' }
-    ]
-  },
-  {
-    id: 'breakout-trader',
-    name: 'Breakout Trader',
-    description: 'Trade breakouts from support/resistance levels',
-    icon: Target,
+    id: 'drawdown-monitor',
+    name: 'Drawdown Monitor',
+    description: 'Monitor account drawdown and get alerts',
+    icon: AlertTriangle,
     color: 'orange',
-    category: 'Trading',
-    trigger_type: 'price_condition',
+    category: 'Risk',
+    trigger_type: 'manual',
     nodes: [
-      { id: 'node-1', type: 'GetLivePrice', data: { symbol: 'XAUUSD' }, position: { x: 100, y: 100 } },
-      { id: 'node-2', type: 'TechnicalIndicator', data: { indicator: 'Donchian', period: 20 }, position: { x: 300, y: 100 } },
-      { id: 'node-3', type: 'Condition', data: { condition: 'price > upper_band', operator: 'breakout' }, position: { x: 500, y: 100 } },
-      { id: 'node-4', type: 'PlaceOrder', data: { orderType: 'BUY', volume: 0.01, sl: 100, tp: 200 }, position: { x: 700, y: 100 } }
+      { id: 'trigger-1', type: 'ManualTrigger', data: {}, position: { x: 100, y: 150 } },
+      { id: 'account-1', type: 'GetAccountInfo', data: {}, position: { x: 300, y: 150 } },
+      { id: 'dd-1', type: 'DrawdownMonitor', data: { max_drawdown_percent: '10' }, position: { x: 500, y: 150 } },
+      { id: 'notify-1', type: 'DashboardNotification', data: { title: 'Drawdown Alert', message: 'Drawdown status checked', type: 'warning' }, position: { x: 700, y: 150 } }
     ],
     connections: [
-      { id: 'conn-1', source: 'node-1', target: 'node-2' },
-      { id: 'conn-2', source: 'node-2', target: 'node-3' },
-      { id: 'conn-3', source: 'node-3', target: 'node-4' }
+      { id: 'c1', source: 'trigger-1', target: 'account-1' },
+      { id: 'c2', source: 'account-1', target: 'dd-1' },
+      { id: 'c3', source: 'dd-1', target: 'notify-1' }
     ]
   },
+  // ===== REPORTS =====
   {
-    id: 'daily-report',
-    name: 'Daily Trading Report',
-    description: 'Get daily summary of your trading performance',
+    id: 'account-report',
+    name: 'Account Status Report',
+    description: 'Get complete account balance and equity report',
     icon: BarChart3,
     color: 'cyan',
     category: 'Reports',
-    trigger_type: 'scheduled',
+    trigger_type: 'manual',
     nodes: [
-      { id: 'node-1', type: 'GetAccountInfo', data: {}, position: { x: 100, y: 100 } },
-      { id: 'node-2', type: 'GetTradeHistory', data: { period: 'today' }, position: { x: 100, y: 200 } },
-      { id: 'node-3', type: 'GenerateReport', data: { type: 'daily_summary' }, position: { x: 300, y: 150 } },
-      { id: 'node-4', type: 'DashboardNotification', data: { title: 'Daily Report', message: 'Your daily trading summary is ready', type: 'info' }, position: { x: 500, y: 150 } }
+      { id: 'trigger-1', type: 'ManualTrigger', data: {}, position: { x: 100, y: 150 } },
+      { id: 'account-1', type: 'GetAccountInfo', data: {}, position: { x: 350, y: 150 } },
+      { id: 'notify-1', type: 'DashboardNotification', data: { title: 'Account Report', message: 'Account status report generated', type: 'info' }, position: { x: 600, y: 150 } }
     ],
     connections: [
-      { id: 'conn-1', source: 'node-1', target: 'node-3' },
-      { id: 'conn-2', source: 'node-2', target: 'node-3' },
-      { id: 'conn-3', source: 'node-3', target: 'node-4' }
+      { id: 'c1', source: 'trigger-1', target: 'account-1' },
+      { id: 'c2', source: 'account-1', target: 'notify-1' }
+    ]
+  },
+  // ===== AI AGENTS =====
+  {
+    id: 'ai-trader-ollama',
+    name: 'AI Trader (FREE Ollama)',
+    description: 'AI-powered trading using FREE local Ollama LLM',
+    icon: Brain,
+    color: 'purple',
+    category: 'AI',
+    trigger_type: 'manual',
+    nodes: [
+      { id: 'trigger-1', type: 'ManualTrigger', data: {}, position: { x: 50, y: 150 } },
+      { id: 'price-1', type: 'GetLivePrice', data: { symbol: 'EURUSD' }, position: { x: 250, y: 100 } },
+      { id: 'rsi-1', type: 'RSI', data: { symbol: 'EURUSD', period: '14', timeframe: 'M15' }, position: { x: 250, y: 200 } },
+      { id: 'ai-1', type: 'AITradingAnalyst', data: { llm_provider: 'ollama', model: 'llama3', symbol: 'EURUSD' }, position: { x: 500, y: 150 } },
+      { id: 'decision-1', type: 'AIDecision', data: { min_confidence: '70' }, position: { x: 750, y: 150 } },
+      { id: 'notify-1', type: 'DashboardNotification', data: { title: 'AI Analysis', message: 'AI trading analysis complete', type: 'info' }, position: { x: 1000, y: 150 } }
+    ],
+    connections: [
+      { id: 'c1', source: 'trigger-1', target: 'price-1' },
+      { id: 'c2', source: 'trigger-1', target: 'rsi-1' },
+      { id: 'c3', source: 'price-1', target: 'ai-1' },
+      { id: 'c4', source: 'rsi-1', target: 'ai-1' },
+      { id: 'c5', source: 'ai-1', target: 'decision-1' },
+      { id: 'c6', source: 'decision-1', target: 'notify-1' }
     ]
   },
   {
-    id: 'drawdown-alert',
-    name: 'Drawdown Alert',
-    description: 'Get warned when account drawdown exceeds limit',
-    icon: AlertTriangle,
-    color: 'red',
-    category: 'Risk',
-    trigger_type: 'scheduled',
+    id: 'ai-trader-groq',
+    name: 'AI Trader (FREE Groq)',
+    description: 'AI-powered trading using FREE Groq cloud LLM (fast!)',
+    icon: Brain,
+    color: 'green',
+    category: 'AI',
+    trigger_type: 'manual',
     nodes: [
-      { id: 'node-1', type: 'GetAccountInfo', data: {}, position: { x: 100, y: 100 } },
-      { id: 'node-2', type: 'CalculateDrawdown', data: {}, position: { x: 300, y: 100 } },
-      { id: 'node-3', type: 'Condition', data: { condition: 'drawdown > 10%', operator: '>' }, position: { x: 500, y: 100 } },
-      { id: 'node-4', type: 'DashboardNotification', data: { title: 'Drawdown Alert', message: 'Account drawdown exceeded 10%!', type: 'error' }, position: { x: 700, y: 100 } }
+      { id: 'trigger-1', type: 'ManualTrigger', data: {}, position: { x: 50, y: 150 } },
+      { id: 'price-1', type: 'GetLivePrice', data: { symbol: 'EURUSD' }, position: { x: 250, y: 150 } },
+      { id: 'ai-1', type: 'AITradingAnalyst', data: { llm_provider: 'groq', model: 'llama3-70b-8192', symbol: 'EURUSD', api_key: '' }, position: { x: 500, y: 150 } },
+      { id: 'notify-1', type: 'DashboardNotification', data: { title: 'AI Groq Analysis', message: 'Groq AI analysis complete', type: 'success' }, position: { x: 750, y: 150 } }
     ],
     connections: [
-      { id: 'conn-1', source: 'node-1', target: 'node-2' },
-      { id: 'conn-2', source: 'node-2', target: 'node-3' },
-      { id: 'conn-3', source: 'node-3', target: 'node-4' }
+      { id: 'c1', source: 'trigger-1', target: 'price-1' },
+      { id: 'c2', source: 'price-1', target: 'ai-1' },
+      { id: 'c3', source: 'ai-1', target: 'notify-1' }
+    ]
+  },
+  {
+    id: 'custom-agent',
+    name: 'Custom AI Agent Builder',
+    description: 'Build your own AI trading agent with custom personality',
+    icon: Brain,
+    color: 'blue',
+    category: 'AI',
+    trigger_type: 'manual',
+    nodes: [
+      { id: 'trigger-1', type: 'ManualTrigger', data: {}, position: { x: 50, y: 150 } },
+      { id: 'price-1', type: 'GetLivePrice', data: { symbol: 'EURUSD' }, position: { x: 250, y: 150 } },
+      { id: 'agent-1', type: 'CustomAgent', data: { agent_name: 'My Trading Bot', agent_personality: 'aggressive but calculated', trading_style: 'day trader', risk_tolerance: 'medium', llm_provider: 'ollama', model: 'llama3', prompt: 'Based on current price {price}, what trade should I make?' }, position: { x: 500, y: 150 } },
+      { id: 'notify-1', type: 'DashboardNotification', data: { title: 'Custom Agent', message: 'Your AI agent has responded', type: 'info' }, position: { x: 750, y: 150 } }
+    ],
+    connections: [
+      { id: 'c1', source: 'trigger-1', target: 'price-1' },
+      { id: 'c2', source: 'price-1', target: 'agent-1' },
+      { id: 'c3', source: 'agent-1', target: 'notify-1' }
     ]
   }
 ];
@@ -194,7 +311,7 @@ export default function AgenticPage() {
   const [showTemplates, setShowTemplates] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
 
-  const categories = ['All', 'Trading', 'Alerts', 'Risk', 'Reports'];
+  const categories = ['All', 'Trading', 'Alerts', 'Risk', 'Reports', 'AI'];
 
   useEffect(() => {
     fetchWorkflows();

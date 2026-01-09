@@ -135,6 +135,7 @@ async def delete_workflow(
     db: AsyncSession = Depends(get_db)
 ):
     """Delete workflow"""
+    from app.agentic.models import WorkflowState, WorkflowExecution, NodeExecutionLog
     
     result = await db.execute(
         select(Workflow).filter(
@@ -150,6 +151,28 @@ async def delete_workflow(
             detail="Workflow not found"
         )
     
+    # Delete related records first (cascade)
+    # Delete node execution logs for this workflow's executions
+    exec_result = await db.execute(
+        select(WorkflowExecution).filter(WorkflowExecution.workflow_id == workflow_id)
+    )
+    executions = exec_result.scalars().all()
+    for execution in executions:
+        await db.execute(
+            select(NodeExecutionLog).filter(NodeExecutionLog.execution_id == execution.id)
+        )
+        # Delete logs
+        from sqlalchemy import delete
+        await db.execute(delete(NodeExecutionLog).where(NodeExecutionLog.execution_id == execution.id))
+    
+    # Delete executions
+    from sqlalchemy import delete
+    await db.execute(delete(WorkflowExecution).where(WorkflowExecution.workflow_id == workflow_id))
+    
+    # Delete workflow states
+    await db.execute(delete(WorkflowState).where(WorkflowState.workflow_id == workflow_id))
+    
+    # Finally delete the workflow
     await db.delete(workflow)
     await db.commit()
     

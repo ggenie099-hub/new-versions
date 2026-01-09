@@ -1,147 +1,138 @@
-# 🚀 Trading Maven - TradingView to MT5 Bridge
+# 🚀 Trading Maven - AI-Powered MT5 Trading Platform
 
-Ultra-low latency trading platform connecting TradingView alerts to MetaTrader 5 with advanced automation features.
+Advanced trading platform with AI agents, visual workflow automation, and TradingView integration for MetaTrader 5.
 
-## ✨ Features
+## ✨ Key Features
 
-### Core Features
-- 🔗 **TradingView Integration** - Webhook-based alert execution
-- 📊 **MT5 Connection** - Real-time account and position sync
-- 🤖 **Agentic Trading System** - N8N-style visual workflow automation
-- 📈 **Live Dashboard** - Real-time positions, trades, and account monitoring
-- 🔔 **Smart Notifications** - Trade alerts and system notifications
-- 🔐 **Secure API** - JWT authentication with API key management
+### 🤖 AI Trading Agents (NEW!)
+- **Ollama** - FREE local LLM (llama3, mistral, phi3)
+- **Groq** - FREE cloud LLM (30 req/min free tier)
+- **OpenRouter** - 100+ models with FREE options
+- **HuggingFace** - FREE inference API
+- **OpenAI** - GPT-4o, GPT-4o-mini
+- **Custom Agent Builder** - Create your own AI trading personality
 
-### Advanced Features
-- ⚡ **Auto-Sync** - Configurable real-time position updates
-- 🎯 **Smart Order Execution** - Automatic filling mode detection
-- 📱 **Responsive UI** - Dark mode, mobile-friendly interface
-- 🔄 **WebSocket Support** - Real-time updates without polling
-- 🛡️ **Encrypted Credentials** - Secure MT5 account storage
+### 📊 AI Trading Intelligence Dashboard
+- Real-time market regime detection (Trending/Ranging/Choppy)
+- AI Trade Readiness score with confidence meter
+- Risk status monitoring with drawdown alerts
+- Session intelligence (London/NY/Asia overlap detection)
+- Smart position sizing recommendations
+
+### 🔗 Agentic Workflow System
+- N8N-style visual workflow builder
+- 40+ pre-built nodes across 10 categories
+- Drag & drop node connections
+- Real-time execution console
+- Pre-built strategy templates
+
+### 📈 Core Trading Features
+- TradingView webhook integration
+- Real-time MT5 account sync
+- Live positions & trade history
+- Multi-account support
+- Auto-sync with configurable intervals
 
 ## 🏗️ Tech Stack
 
-### Backend
-- **FastAPI** - High-performance Python web framework
-- **SQLAlchemy** - ORM with async support
-- **MetaTrader5** - MT5 Python integration
-- **SQLite** - Lightweight database
-- **Alembic** - Database migrations
+| Backend | Frontend |
+|---------|----------|
+| FastAPI | Next.js 14 |
+| SQLAlchemy | TypeScript |
+| MetaTrader5 | Tailwind CSS |
+| SQLite | ReactFlow |
+| Alembic | Zustand |
 
-### Frontend
-- **Next.js 14** - React framework with App Router
-- **TypeScript** - Type-safe development
-- **Tailwind CSS** - Utility-first styling
-- **Zustand** - State management
-- **React Hot Toast** - Notifications
+## 📦 Quick Start
 
-## 📦 Installation
-
-### Prerequisites
-- Python 3.10+
-- Node.js 18+
-- MetaTrader 5 Terminal
-- ngrok or LocalTunnel (for webhooks)
-
-### Backend Setup
-
+### 1. Backend Setup
 ```bash
 cd backend
-
-# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+venv\Scripts\activate  # Windows
 pip install -r requirements.txt
-
-# Initialize database
-python init_db.py
-
-# Run migrations
-alembic upgrade head
-
-# Start server
 python run.py
 ```
 
-### Frontend Setup
-
+### 2. Frontend Setup
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start development server
 npm run dev
 ```
 
-### Tunnel Setup (for TradingView webhooks)
+### 3. Access Dashboard
+- Open: http://localhost:3000
+- Login: admin@autotrading.com / password123
 
+## 🤖 AI Agent Setup
+
+### FREE Options (No Cost)
+
+**Option 1: Ollama (Local)**
 ```bash
-# Option 1: LocalTunnel (Recommended)
-npm install -g localtunnel
-lt --port 8000
-
-# Option 2: ngrok
-ngrok http 8000
+# Install from https://ollama.ai
+ollama pull llama3
+ollama serve
 ```
 
-## 🚀 Quick Start
+**Option 2: Groq (Cloud)**
+1. Get FREE API key: https://console.groq.com
+2. Add key in node config
 
-1. **Start Backend**
-   ```bash
-   cd backend && python run.py
-   ```
+**Option 3: OpenRouter**
+1. Get API key: https://openrouter.ai
+2. Use FREE models: `llama-3-8b:free`, `mistral-7b:free`
 
-2. **Start Frontend**
-   ```bash
-   cd frontend && npm run dev
-   ```
+## 📋 Available Node Categories
 
-3. **Start Tunnel**
-   ```bash
-   lt --port 8000
-   ```
+| Category | Nodes |
+|----------|-------|
+| **Triggers** | Manual, Schedule, Price, Indicator, Webhook |
+| **Market Data** | GetLivePrice, GetAccountInfo |
+| **Indicators** | RSI, MACD, Moving Average, Bollinger Bands, ATR |
+| **Conditions** | If/Else, Compare |
+| **Risk Management** | Position Sizer, Drawdown Monitor, Daily Loss Limit |
+| **Orders** | Market Order, Close Position |
+| **AI Agents** | Ollama, Groq, OpenRouter, OpenAI, Custom Agent |
+| **Notifications** | Dashboard Notification |
+| **Memory** | Set State, Get State |
+| **News** | Fetch News, Sentiment Analysis |
 
-4. **Access Dashboard**
-   - Open: http://localhost:3000
-   - Login with your credentials
+## 🎯 Pre-built Strategy Templates
 
-5. **Connect MT5 Account**
-   - Go to "Add MT5 Account"
-   - Enter your MT5 credentials
-   - Click "Connect"
+### Trading Strategies
+- RSI Scalper Bot
+- MACD Crossover Bot
+- Bollinger Bounce Bot
+- Quick BUY/SELL Bot
+- Gold Scalper Bot
 
-6. **Setup TradingView Webhook**
-   - Copy webhook URL from tunnel
-   - Copy API key from Bridge page
-   - Create alert in TradingView
-   - Add webhook URL and JSON payload
+### AI Strategies
+- AI Trader (FREE Ollama)
+- AI Trader (FREE Groq)
+- Custom AI Agent Builder
 
-## 📖 Documentation
+### Risk & Reports
+- Risk Check Bot
+- Drawdown Monitor
+- Account Status Report
 
-Detailed documentation available in `/docs`:
+## 🔧 Environment Variables
 
-- [Complete Setup Guide](docs/COMPLETE_SETUP_SUMMARY.md)
-- [TradingView Integration](docs/WORKING_TRADINGVIEW_SETUP.md)
-- [Agentic System](docs/AGENTIC_README.md)
-- [Troubleshooting](docs/TRADINGVIEW_WEBHOOK_DEBUG.md)
-
-## 🔧 Configuration
-
-### Environment Variables
-
-Create `.env` file in backend directory:
-
+Create `backend/.env`:
 ```env
-SECRET_KEY=your-secret-key-here
+SECRET_KEY=your-secret-key
+ENCRYPTION_KEY=your-fernet-key
 DATABASE_URL=sqlite:///./trading_maven.db
-CORS_ORIGINS=http://localhost:3000
+
+# Optional AI Keys
+GROQ_API_KEY=your-groq-key
+OPENROUTER_API_KEY=your-openrouter-key
+OPENAI_API_KEY=your-openai-key
 ```
 
-### TradingView Alert Format
+## 📖 TradingView Webhook Format
 
 ```json
 {
@@ -149,96 +140,56 @@ CORS_ORIGINS=http://localhost:3000
   "action": "BUY",
   "symbol": "EURUSD",
   "volume": 0.01,
-  "stop_loss": 1.14,
-  "take_profit": 1.16
+  "stop_loss": 50,
+  "take_profit": 100
 }
 ```
 
-## 🎯 Features Overview
+## 🔒 Security Features
 
-### Dashboard
-- Real-time account balance and equity
-- Open positions with live P&L
-- Recent trades history
-- Auto-sync with configurable intervals
-
-### TradingView Bridge
-- Webhook URL generation
-- API key management
-- Alert setup instructions
-- Test webhook functionality
-
-### Agentic Automations
-- Visual workflow builder
-- Pre-built node types (Market Data, Orders, Conditions)
-- Workflow execution history
-- Manual and scheduled triggers
-
-## 🔒 Security
-
-- JWT-based authentication
+- JWT authentication
 - Encrypted MT5 credentials (Fernet)
 - API key authentication for webhooks
 - CORS protection
 - Secure password hashing (bcrypt)
 
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Webhook not working?**
-- Check tunnel is running
-- Verify webhook URL in TradingView
-- Check API key is correct
-
-**MT5 not connecting?**
-- Ensure MT5 terminal is running
-- Enable AutoTrading in MT5
-- Check credentials are correct
-
-**Orders failing?**
-- Enable "Allow algorithmic trading" in MT5
-- Check margin is sufficient
-- Verify symbol is correct
-
-See [Troubleshooting Guide](docs/TRADINGVIEW_WEBHOOK_DEBUG.md) for more details.
-
-## 📊 Project Structure
+## 📁 Project Structure
 
 ```
 trading-maven/
 ├── backend/
 │   ├── app/
-│   │   ├── agentic/          # Agentic system
-│   │   ├── routers/          # API endpoints
-│   │   ├── models.py         # Database models
-│   │   ├── mt5_handler.py    # MT5 integration
-│   │   └── main.py           # FastAPI app
-│   ├── alembic/              # Database migrations
+│   │   ├── agentic/
+│   │   │   ├── nodes/        # All node implementations
+│   │   │   ├── engine/       # Workflow executor
+│   │   │   └── routers/      # API endpoints
+│   │   ├── analytics/        # AI analytics engine
+│   │   ├── routers/          # Core API endpoints
+│   │   └── mt5_handler.py    # MT5 integration
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
-│   │   ├── app/              # Next.js pages
+│   │   ├── app/dashboard/    # Dashboard pages
 │   │   ├── components/       # React components
-│   │   ├── lib/              # Utilities
-│   │   └── store/            # State management
+│   │   └── store/            # Zustand state
 │   └── package.json
 └── docs/                     # Documentation
 ```
 
-## 🤝 Contributing
+## 🐛 Troubleshooting
 
-This is a private project. For questions or suggestions, contact the development team.
+| Issue | Solution |
+|-------|----------|
+| MT5 not connecting | Ensure MT5 terminal is running with AutoTrading enabled |
+| Orders failing | Check margin, enable "Allow algorithmic trading" |
+| AI not responding | Check Ollama is running (`ollama serve`) |
+| Webhook not working | Verify tunnel URL and API key |
 
-## 📄 License
+## 📚 Documentation
 
-All rights reserved.
-
-## 🙏 Acknowledgments
-
-- MetaTrader 5 for trading platform
-- TradingView for charting and alerts
-- FastAPI and Next.js communities
+- [Agentic System Guide](docs/AGENTIC_README.md)
+- [TradingView Setup](docs/WORKING_TRADINGVIEW_SETUP.md)
+- [Complete Setup](docs/COMPLETE_SETUP_SUMMARY.md)
 
 ---
 

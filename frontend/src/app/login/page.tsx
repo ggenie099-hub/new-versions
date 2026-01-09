@@ -27,6 +27,16 @@ export default function LoginPage() {
       localStorage.setItem('access_token', access_token);
       localStorage.setItem('refresh_token', refresh_token);
       
+      // Fetch user data after login
+      try {
+        const userResponse = await authAPI.getCurrentUser();
+        const userData = userResponse.data;
+        localStorage.setItem('user', JSON.stringify(userData));
+        console.log('User data stored:', userData);
+      } catch (userError) {
+        console.error('Failed to fetch user data:', userError);
+      }
+      
       // Verify tokens were stored
       const storedToken = localStorage.getItem('access_token');
       console.log('Token verification after storage:', storedToken ? 'Token stored successfully' : 'Token NOT stored');

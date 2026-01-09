@@ -375,6 +375,127 @@ async def get_node_types() -> Dict[str, Any]:
                     }
                 }
             ]
+        },
+        "ai_agents": {
+            "name": "AI Agents (LLM)",
+            "description": "AI-powered trading intelligence with FREE & paid options",
+            "nodes": [
+                {
+                    "type": "Ollama",
+                    "name": "Ollama (FREE Local)",
+                    "description": "FREE local LLM - requires Ollama installed",
+                    "inputs": [],
+                    "outputs": ["response", "model", "success", "tokens"],
+                    "config": {
+                        "model": {"type": "select", "options": ["llama3", "mistral", "codellama", "phi3", "gemma"], "default": "llama3"},
+                        "prompt": {"type": "textarea", "required": True},
+                        "system_prompt": {"type": "textarea", "default": "You are a professional forex trading analyst."},
+                        "ollama_url": {"type": "string", "default": "http://localhost:11434"}
+                    }
+                },
+                {
+                    "type": "Groq",
+                    "name": "Groq (FREE Cloud)",
+                    "description": "FREE fast cloud LLM - 30 req/min free tier",
+                    "inputs": [],
+                    "outputs": ["response", "model", "success", "tokens"],
+                    "config": {
+                        "api_key": {"type": "password", "required": True},
+                        "model": {"type": "select", "options": ["llama3-70b-8192", "mixtral-8x7b-32768", "gemma-7b-it"], "default": "llama3-70b-8192"},
+                        "prompt": {"type": "textarea", "required": True},
+                        "system_prompt": {"type": "textarea", "default": "You are a professional forex trading analyst."}
+                    }
+                },
+                {
+                    "type": "HuggingFace",
+                    "name": "HuggingFace (FREE)",
+                    "description": "FREE HuggingFace inference API",
+                    "inputs": [],
+                    "outputs": ["response", "model", "success"],
+                    "config": {
+                        "api_key": {"type": "password", "required": True},
+                        "model": {"type": "string", "default": "mistralai/Mistral-7B-Instruct-v0.2"},
+                        "prompt": {"type": "textarea", "required": True}
+                    }
+                },
+                {
+                    "type": "OpenAI",
+                    "name": "OpenAI GPT (Paid)",
+                    "description": "OpenAI GPT models - paid API",
+                    "inputs": [],
+                    "outputs": ["response", "model", "success", "tokens"],
+                    "config": {
+                        "api_key": {"type": "password", "required": True},
+                        "model": {"type": "select", "options": ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"], "default": "gpt-4o-mini"},
+                        "prompt": {"type": "textarea", "required": True},
+                        "system_prompt": {"type": "textarea", "default": "You are a professional forex trading analyst."}
+                    }
+                },
+                {
+                    "type": "OpenRouter",
+                    "name": "OpenRouter (100+ Models)",
+                    "description": "Access 100+ AI models - FREE models available!",
+                    "inputs": [],
+                    "outputs": ["response", "model", "success", "tokens"],
+                    "config": {
+                        "api_key": {"type": "password", "required": True},
+                        "model": {"type": "select", "options": [
+                            "meta-llama/llama-3-8b-instruct:free",
+                            "mistralai/mistral-7b-instruct:free", 
+                            "google/gemma-7b-it:free",
+                            "anthropic/claude-3-haiku",
+                            "anthropic/claude-3-sonnet",
+                            "openai/gpt-4o",
+                            "openai/gpt-4o-mini",
+                            "google/gemini-pro",
+                            "meta-llama/llama-3-70b-instruct"
+                        ], "default": "meta-llama/llama-3-8b-instruct:free"},
+                        "prompt": {"type": "textarea", "required": True},
+                        "system_prompt": {"type": "textarea", "default": "You are a professional forex trading analyst."}
+                    }
+                },
+                {
+                    "type": "AITradingAnalyst",
+                    "name": "AI Trading Analyst",
+                    "description": "Pre-built AI analyst - gives BUY/SELL/HOLD recommendations",
+                    "inputs": ["price", "rsi", "macd", "trend"],
+                    "outputs": ["recommendation", "confidence", "entry_price", "stop_loss", "take_profit", "reasoning"],
+                    "config": {
+                        "llm_provider": {"type": "select", "options": ["ollama", "groq", "openai"], "default": "ollama"},
+                        "api_key": {"type": "password", "required": False},
+                        "model": {"type": "string", "default": "llama3"},
+                        "symbol": {"type": "string", "default": "EURUSD"}
+                    }
+                },
+                {
+                    "type": "CustomAgent",
+                    "name": "Custom AI Agent",
+                    "description": "Build your own AI agent with custom personality",
+                    "inputs": [],
+                    "outputs": ["response", "agent_name", "model", "provider", "success"],
+                    "config": {
+                        "agent_name": {"type": "string", "default": "Trading Bot"},
+                        "agent_personality": {"type": "string", "default": "professional and analytical"},
+                        "trading_style": {"type": "select", "options": ["conservative scalper", "aggressive day trader", "swing trader", "position trader"], "default": "conservative scalper"},
+                        "risk_tolerance": {"type": "select", "options": ["low", "medium", "high"], "default": "low"},
+                        "custom_instructions": {"type": "textarea", "default": ""},
+                        "llm_provider": {"type": "select", "options": ["ollama", "groq", "openai"], "default": "ollama"},
+                        "api_key": {"type": "password", "required": False},
+                        "model": {"type": "string", "default": "llama3"},
+                        "prompt": {"type": "textarea", "required": True}
+                    }
+                },
+                {
+                    "type": "AIDecision",
+                    "name": "AI Decision Gate",
+                    "description": "Convert AI analysis to trade decision",
+                    "inputs": ["recommendation", "confidence"],
+                    "outputs": ["should_trade", "action", "confidence", "entry_price", "stop_loss", "take_profit"],
+                    "config": {
+                        "min_confidence": {"type": "number", "default": 70}
+                    }
+                }
+            ]
         }
     }
     

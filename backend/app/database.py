@@ -9,7 +9,7 @@ if 'sqlite' in settings.DATABASE_URL:
     # SQLite doesn't support pool_size and max_overflow
     engine = create_async_engine(
         settings.DATABASE_URL,
-        echo=True,
+        echo=False,  # Disable SQL logging for cleaner console
         future=True,
         connect_args={"check_same_thread": False}
     )
@@ -17,7 +17,7 @@ else:
     # PostgreSQL/MySQL configuration
     engine = create_async_engine(
         settings.DATABASE_URL,
-        echo=True,
+        echo=False,  # Disable SQL logging for cleaner console
         future=True,
         pool_pre_ping=True,
         pool_size=10,

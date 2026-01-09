@@ -85,7 +85,7 @@ export default function Sidebar() {
               className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 lg:hidden"
               aria-label="Close sidebar"
             >
-              <X size={20} />
+              <X size={20} className="text-white" />
             </button>
             {/* Minimize/Expand toggle (always visible on desktop) */}
             <button
@@ -96,12 +96,12 @@ export default function Sidebar() {
               title={sidebarMinimized ? 'Expand sidebar' : 'Minimize sidebar'}
               className={clsx(
                 'absolute top-2 right-2 hidden lg:flex items-center justify-center',
-                'p-2 rounded-lg border border-gray-200 dark:border-gray-800',
-                'bg-white dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800',
+                'p-2 rounded-lg border border-gray-600',
+                'bg-gray-800 hover:bg-gray-700',
                 'transition-colors'
               )}
             >
-              {sidebarMinimized ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+              {sidebarMinimized ? <ChevronRight size={18} className="text-white" /> : <ChevronLeft size={18} className="text-white" />}
             </button>
           </div>
 
@@ -198,11 +198,11 @@ export default function Sidebar() {
       <button
         onClick={toggleSidebar}
         className={clsx(
-          'fixed top-4 left-4 z-30 p-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-lg lg:hidden',
-          'hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors'
+          'fixed top-4 left-4 z-30 p-2 rounded-lg bg-gray-900 border border-gray-700 shadow-lg lg:hidden',
+          'hover:bg-gray-800 transition-colors'
         )}
       >
-        <Menu size={24} />
+        <Menu size={24} className="text-white" />
       </button>
     </>
   );

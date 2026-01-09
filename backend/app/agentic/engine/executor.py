@@ -32,6 +32,16 @@ from app.agentic.nodes import (
 )
 from app.agentic.nodes.memory import SetStateNode, GetStateNode
 from app.agentic.nodes.news import NewsFetchNode, SentimentAnalysisNode
+from app.agentic.nodes.ai_agents import (
+    OllamaNode,
+    GroqNode,
+    HuggingFaceNode,
+    OpenAINode,
+    OpenRouterNode,
+    AITradingAnalystNode,
+    CustomAgentNode,
+    AIDecisionNode
+)
 from app.database import AsyncSessionLocal
 
 # Node registry
@@ -73,6 +83,16 @@ NODE_REGISTRY = {
     'DailyLossLimit': DailyLossLimitNode,
     'MaxPositions': MaxPositionsNode,
     'SmartRiskManager': SmartRiskManagerNode,
+    
+    # AI Agent Nodes (FREE + Paid options)
+    'Ollama': OllamaNode,
+    'Groq': GroqNode,
+    'HuggingFace': HuggingFaceNode,
+    'OpenAI': OpenAINode,
+    'OpenRouter': OpenRouterNode,
+    'AITradingAnalyst': AITradingAnalystNode,
+    'CustomAgent': CustomAgentNode,
+    'AIDecision': AIDecisionNode,
     
     # Trigger Nodes
     'ScheduleTrigger': ScheduleTriggerNode,

@@ -232,13 +232,41 @@ export default function DashboardPage() {
                   onChange={async (e) => {
                     const accountId = parseInt(e.target.value);
                     const account = mt5Accounts.find((a) => a.id === accountId);
-                    if (account) {
+                    if (account && account.id !== activeAccount?.id) {
                       setSyncing(true);
                       try {
-                        await mt5API.connectAccount(accountId);
-                        setActiveAccount(account);
+                        // First disconnect current account if connected
+                        if (activeAccount?.is_connected) {
+                          try {
+                            await mt5API.disconnectAccount(activeAccount.id);
+                          } catch (e) {
+                            // Ignore disconnect errors
+                          }
+                        }
+                        
+                        // Connect to new account
+                        const connectRes = await mt5API.connectAccount(accountId);
+                        const updatedAccount = connectRes.data.account || { ...account, is_connected: true };
+                        
+                        // Update local state
+                        setActiveAccount(updatedAccount);
+                        setMT5Accounts(prev => prev.map(a => ({
+                          ...a,
+                          is_connected: a.id === accountId
+                        })));
+                        
+                        // Sync positions for new account
+                        try {
+                          const positionsRes = await tradeAPI.syncPositions(accountId);
+                          setPositions(positionsRes.data.positions || []);
+                        } catch (e) {
+                          setPositions([]);
+                        }
+                        
+                        // Reload analytics for new account
+                        setAnalytics(null);
+                        
                         toast.success(`Switched to account ${account.account_number}`);
-                        await loadDashboardData();
                       } catch (error: any) {
                         toast.error(error.response?.data?.detail || 'Failed to switch account');
                       } finally {
@@ -246,10 +274,10 @@ export default function DashboardPage() {
                       }
                     }
                   }}
-                  className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm font-semibold"
+                  className="px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-sm font-semibold text-white"
                 >
                   {mt5Accounts.map((acc) => (
-                    <option key={acc.id} value={acc.id}>
+                    <option key={acc.id} value={acc.id} className="bg-gray-800 text-white">
                       {acc.account_number} ({acc.is_connected ? 'Connected' : 'Disconnected'})
                     </option>
                   ))}
@@ -261,7 +289,7 @@ export default function DashboardPage() {
             <select
               value={selectedSymbol}
               onChange={(e) => setSelectedSymbol(e.target.value)}
-              className="px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg text-sm"
+              className="px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-sm text-white"
             >
               <option value="EURUSD">EURUSD</option>
               <option value="GBPUSD">GBPUSD</option>
